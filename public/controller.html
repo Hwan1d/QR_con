@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Arcade Controller</title>
+  <!-- PeerJS for Serverless WebRTC P2P communication -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100dvh;
+      background: radial-gradient(circle at top, #1d223c 0%, #090b14 100%);
+      color: #ffffff;
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px 16px 24px;
+      overflow-x: hidden;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      background: rgba(0, 245, 212, 0.14);
+      border: 1px solid rgba(0, 245, 212, 0.4);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #00f5d4;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #00f5d4;
+      box-shadow: 0 0 10px #00f5d4;
+    }
+
+    .reset-link {
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    /* Mode Selector Tabs */
+    .mode-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 5px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .mode-tab {
+      padding: 10px 6px;
+      border: none;
+      border-radius: 12px;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .mode-tab.active {
+      background: linear-gradient(135deg, #00f5d4, #00bbf9);
+      color: #070810;
+      box-shadow: 0 4px 16px rgba(0, 245, 212, 0.35);
+    }
+
+    /* Color Palette Bar */
+    .palette {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .swatch {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 2.5px solid transparent;
+      cursor: pointer;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+
+    .swatch.active {
+      transform: scale(1.22);
+      border-color: #ffffff;
+      box-shadow: 0 0 14px currentColor;
+    }
+
+    /* Virtual Joystick Zone */
+    .joystick-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: 18px 0;
+    }
+
+    .joystick-base {
+      position: relative;
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 70%);
+      border: 2px solid rgba(0, 245, 212, 0.3);
+      box-shadow: inset 0 0 30px rgba(0, 245, 212, 0.12), 0 10px 30px rgba(0,0,0,0.4);
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .joystick-stick {
+      position: absolute;
+      width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, #ffffff, #00f5d4);
+      box-shadow: 0 8px 25px rgba(0, 245, 212, 0.55);
+      pointer-events: none;
+      transition: transform 0.05s linear;
+    }
+
+    .joy-hint {
+      margin-top: 10px;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.55);
+    }
+
+    /* Arcade Action Buttons */
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .action-btn {
+      padding: 16px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.1s;
+    }
+
+    .action-btn:active {
+      transform: scale(0.94);
+    }
+
+    .btn-splat {
+      background: linear-gradient(135deg, #f15bb5, #9b5de5);
+      box-shadow: 0 8px 24px rgba(241, 91, 181, 0.35);
+    }
+
+    .btn-firework {
+      background: linear-gradient(135deg, #ff9f1c, #f72585);
+      box-shadow: 0 8px 24px rgba(247, 37, 133, 0.35);
+    }
+
+    /* Emoji Bar */
+    .emoji-bar {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .emoji-btn {
+      flex: 1;
+      padding: 10px 0;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      font-size: 22px;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.2s;
+    }
+
+    .emoji-btn:active {
+      transform: scale(0.88);
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Live Message Shooter */
+    .msg-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .msg-input {
+      flex: 1;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .msg-send {
+      padding: 0 18px;
+      border-radius: 14px;
+      border: none;
+      background: #00f5d4;
+      color: #070810;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <div>
+    <div class="header">
+      <div class="status-chip">
+        <span class="dot"></span>
+        <span id="conn-label">CONNECTING...</span>
+      </div>
+      <button class="reset-link" id="reset-qr-btn">QR 화면으로 리셋</button>
+    </div>
+
+    <!-- Mode Switcher -->
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="canvas">🎨 그래피티</button>
+      <button class="mode-tab" data-mode="arcade">🕹️ 벽돌깨기</button>
+      <button class="mode-tab" data-mode="fireworks">🎆 불꽃놀이</button>
+    </div>
+
+    <!-- Neon Color Swatches -->
+    <div class="palette" id="palette">
+      <div class="swatch active" style="background:#00f5d4; color:#00f5d4" data-color="#00f5d4"></div>
+      <div class="swatch" style="background:#f15bb5; color:#f15bb5" data-color="#f15bb5"></div>
+      <div class="swatch" style="background:#fee440; color:#fee440" data-color="#fee440"></div>
+      <div class="swatch" style="background:#00bbf9; color:#00bbf9" data-color="#00bbf9"></div>
+      <div class="swatch" style="background:#9b5de5; color:#9b5de5" data-color="#9b5de5"></div>
+      <div class="swatch" style="background:#ff595e; color:#ff595e" data-color="#ff595e"></div>
+    </div>
+  </div>
+
+  <!-- Analog Joystick -->
+  <div class="joystick-section">
+    <div class="joystick-base" id="joy-base">
+      <div class="joystick-stick" id="joy-stick"></div>
+    </div>
+    <div class="joy-hint">드래그하여 큰 화면의 커서/패들을 조종하세요</div>
+  </div>
+
+  <!-- Action Triggers -->
+  <div>
+    <div class="action-grid">
+      <button class="action-btn btn-splat" id="btn-splat">💥 물감 스플랫</button>
+      <button class="action-btn btn-firework" id="btn-firework">🎆 대형 불꽃 발사</button>
+    </div>
+
+    <div class="emoji-bar">
+      <button class="emoji-btn" data-emoji="🔥">🔥</button>
+      <button class="emoji-btn" data-emoji="🚀">🚀</button>
+      <button class="emoji-btn" data-emoji="⚡">⚡</button>
+      <button class="emoji-btn" data-emoji="🎉">🎉</button>
+      <button class="emoji-btn" data-emoji="👾">👾</button>
+      <button class="emoji-btn" id="btn-clear" title="캔버스 지우기">🧹</button>
+    </div>
+
+    <form class="msg-row" id="msg-form">
+      <input
+        type="text"
+        class="msg-input"
+        id="msg-input"
+        placeholder="큰 화면에 띄울 한 줄 메시지..."
+        maxlength="24"
+      />
+      <button type="submit" class="msg-send">발사</button>
+    </form>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const targetPeerId = params.get('peer');
+    const connLabel = document.getElementById('conn-label');
+
+    let currentColor = '#00f5d4';
+    const playerNumber = Math.floor(10 + Math.random() * 89);
+    let peerConn = null;
+
+    function vibrate(ms = 25) {
+      if (navigator.vibrate) navigator.vibrate(ms);
+    }
+
+    function sendToScreen(event, payload = {}) {
+      if (peerConn && peerConn.open) {
+        peerConn.send({ event, ...payload });
+      }
+    }
+
+    // Connect to the PC Screen via PeerJS WebRTC (Works over LTE/5G/Wi-Fi anywhere!)
+    if (targetPeerId) {
+      const peer = new Peer();
+      peer.on('open', () => {
+        peerConn = peer.connect(targetPeerId, { reliable: true });
+        peerConn.on('open', () => {
+          connLabel.textContent = 'REMOTE PAD CONNECTED';
+          vibrate([40, 60, 80]);
+          sendToScreen('join-controller', {
+            nickname: `PLAYER #${playerNumber}`,
+            color: currentColor
+          });
+        });
+      });
+    } else {
+      connLabel.textContent = 'DEMO CONTROLLER';
+    }
+
+    // Mode Tabs
+    document.querySelectorAll('.mode-tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.mode-tab').forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        vibrate(30);
+        sendToScreen('switch-mode', { mode: tab.dataset.mode });
+      });
+    });
+
+    // Color Palette
+    const stick = document.getElementById('joy-stick');
+    document.querySelectorAll('.swatch').forEach((sw) => {
+      sw.addEventListener('click', () => {
+        document.querySelectorAll('.swatch').forEach((s) => s.classList.remove('active'));
+        sw.classList.add('active');
+        currentColor = sw.dataset.color;
+        stick.style.background = `radial-gradient(circle at 30% 30%, #ffffff, ${currentColor})`;
+        stick.style.boxShadow = `0 8px 25px ${currentColor}88`;
+        vibrate(20);
+        sendToScreen('controller-action', { type: 'color', color: currentColor });
+      });
+    });
+
+    // Analog Joystick Logic
+    const base = document.getElementById('joy-base');
+    let dragging = false;
+    const maxDist = 56;
+
+    function handleMove(clientX, clientY) {
+      const rect = base.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      let dx = clientX - cx;
+      let dy = clientY - cy;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > maxDist) {
+        dx = (dx / dist) * maxDist;
+        dy = (dy / dist) * maxDist;
+      }
+
+      stick.style.transform = `translate(${dx}px, ${dy}px)`;
+
+      sendToScreen('controller-action', {
+        type: 'joystick',
+        dx: +(dx / maxDist).toFixed(2),
+        dy: +(dy / maxDist).toFixed(2),
+        color: currentColor
+      });
+    }
+
+    function resetStick() {
+      dragging = false;
+      stick.style.transform = 'translate(0px, 0px)';
+      sendToScreen('controller-action', {
+        type: 'joystick',
+        dx: 0,
+        dy: 0,
+        color: currentColor
+      });
+    }
+
+    base.addEventListener('pointerdown', (e) => {
+      dragging = true;
+      base.setPointerCapture(e.pointerId);
+      handleMove(e.clientX, e.clientY);
+    });
+
+    base.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      handleMove(e.clientX, e.clientY);
+    });
+
+    base.addEventListener('pointerup', resetStick);
+    base.addEventListener('pointercancel', resetStick);
+
+    // Splat & Firework Buttons
+    document.getElementById('btn-splat').addEventListener('click', () => {
+      vibrate(40);
+      sendToScreen('controller-action', {
+        type: 'splat',
+        color: currentColor
+      });
+    });
+
+    document.getElementById('btn-firework').addEventListener('click', () => {
+      vibrate([30, 40, 50]);
+      sendToScreen('controller-action', {
+        type: 'firework',
+        color: currentColor
+      });
+    });
+
+    // Emoji Buttons
+    document.querySelectorAll('.emoji-btn[data-emoji]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        vibrate(25);
+        sendToScreen('controller-action', {
+          type: 'emoji',
+          emoji: btn.dataset.emoji
+        });
+      });
+    });
+
+    // Clear Canvas
+    document.getElementById('btn-clear').addEventListener('click', () => {
+      vibrate(35);
+      sendToScreen('controller-action', { type: 'clear' });
+    });
+
+    // Live Message Form
+    const msgForm = document.getElementById('msg-form');
+    const msgInput = document.getElementById('msg-input');
+    msgForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = msgInput.value.trim();
+      if (!text) return;
+      vibrate(40);
+      sendToScreen('controller-action', {
+        type: 'message',
+        text,
+        color: currentColor
+      });
+      msgInput.value = '';
+    });
+
+    // Reset back to Lonely QR Screen
+    document.getElementById('reset-qr-btn').addEventListener('click', () => {
+      vibrate(30);
+      sendToScreen('reset-to-qr');
+    });
+  </script>
+</body>
+</html>

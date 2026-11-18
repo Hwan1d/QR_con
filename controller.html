@@ -23,7 +23,7 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 18px 16px 24px;
+      padding: 16px 16px 22px;
       overflow-x: hidden;
     }
 
@@ -31,13 +31,14 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
     }
 
     .status-chip {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 6px 14px;
+      padding: 6px 12px;
       background: rgba(0, 245, 212, 0.14);
       border: 1px solid rgba(0, 245, 212, 0.4);
       border-radius: 999px;
@@ -54,14 +55,30 @@
       box-shadow: 0 0 10px #00f5d4;
     }
 
-    .reset-link {
-      padding: 6px 12px;
+    .nickname-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      color: rgba(255, 255, 255, 0.75);
-      font-size: 12px;
-      cursor: pointer;
+      padding: 4px 12px;
+    }
+
+    .nickname-box span {
+      font-size: 11px;
+      opacity: 0.6;
+    }
+
+    .nickname-input {
+      width: 78px;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-weight: 800;
+      font-size: 13px;
+      outline: none;
+      text-align: center;
     }
 
     /* Mode Selector Tabs */
@@ -69,7 +86,7 @@
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 8px;
-      margin-top: 14px;
+      margin-top: 12px;
       background: rgba(255, 255, 255, 0.05);
       padding: 5px;
       border-radius: 16px;
@@ -99,7 +116,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 14px;
+      margin-top: 12px;
       padding: 10px 14px;
       background: rgba(255, 255, 255, 0.04);
       border-radius: 18px;
@@ -127,13 +144,13 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      margin: 18px 0;
+      margin: 14px 0;
     }
 
     .joystick-base {
       position: relative;
-      width: 190px;
-      height: 190px;
+      width: 185px;
+      height: 185px;
       border-radius: 50%;
       background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 70%);
       border: 2px solid rgba(0, 245, 212, 0.3);
@@ -146,8 +163,8 @@
 
     .joystick-stick {
       position: absolute;
-      width: 76px;
-      height: 76px;
+      width: 74px;
+      height: 74px;
       border-radius: 50%;
       background: radial-gradient(circle at 30% 30%, #ffffff, #00f5d4);
       box-shadow: 0 8px 25px rgba(0, 245, 212, 0.55);
@@ -169,7 +186,7 @@
     }
 
     .action-btn {
-      padding: 16px 12px;
+      padding: 15px 12px;
       border-radius: 18px;
       border: 1px solid rgba(255, 255, 255, 0.15);
       font-size: 15px;
@@ -256,16 +273,19 @@
   <div>
     <div class="header">
       <div class="status-chip">
-        <span class="dot"></span>
+        <span class="dot" id="status-dot"></span>
         <span id="conn-label">CONNECTING...</span>
       </div>
-      <button class="reset-link" id="reset-qr-btn">QR 화면으로 리셋</button>
+      <div class="nickname-box">
+        <span>내 이름:</span>
+        <input type="text" id="nickname-input" class="nickname-input" maxlength="10" />
+      </div>
     </div>
 
     <!-- Mode Switcher -->
     <div class="mode-tabs">
       <button class="mode-tab active" data-mode="canvas">🎨 그래피티</button>
-      <button class="mode-tab" data-mode="arcade">🕹️ 벽돌깨기</button>
+      <button class="mode-tab" data-mode="arcade">🕹️ 협동 벽돌깨기</button>
       <button class="mode-tab" data-mode="fireworks">🎆 불꽃놀이</button>
     </div>
 
@@ -285,13 +305,13 @@
     <div class="joystick-base" id="joy-base">
       <div class="joystick-stick" id="joy-stick"></div>
     </div>
-    <div class="joy-hint">드래그하여 큰 화면의 커서/패들을 조종하세요</div>
+    <div class="joy-hint">드래그하여 내 전용 커서/패들을 조종하세요</div>
   </div>
 
   <!-- Action Triggers -->
   <div>
     <div class="action-grid">
-      <button class="action-btn btn-splat" id="btn-splat">💥 물감 스플랫</button>
+      <button class="action-btn btn-splat" id="btn-splat">💥 내 위치에 스플랫</button>
       <button class="action-btn btn-firework" id="btn-firework">🎆 대형 불꽃 발사</button>
     </div>
 
@@ -309,7 +329,7 @@
         type="text"
         class="msg-input"
         id="msg-input"
-        placeholder="큰 화면에 띄울 한 줄 메시지..."
+        placeholder="내 커서 위로 띄울 한 줄 메시지..."
         maxlength="24"
       />
       <button type="submit" class="msg-send">발사</button>
@@ -319,39 +339,104 @@
   <script>
     const params = new URLSearchParams(window.location.search);
     const targetPeerId = params.get('peer');
+    const simId = params.get('sim');
     const connLabel = document.getElementById('conn-label');
+    const statusDot = document.getElementById('status-dot');
+    const nicknameInput = document.getElementById('nickname-input');
+    const stick = document.getElementById('joy-stick');
 
-    let currentColor = '#00f5d4';
-    const playerNumber = Math.floor(10 + Math.random() * 89);
+    // Persistent device Player ID so camera preview / page reload doesn't spawn ghost players
+    let playerId = simId;
+    if (!playerId) {
+      playerId = localStorage.getItem('qrcon_player_id');
+      if (!playerId) {
+        playerId = 'p-' + Math.random().toString(36).substring(2, 10);
+        localStorage.setItem('qrcon_player_id', playerId);
+      }
+    }
+
+    let nickname = localStorage.getItem('qrcon_nickname_' + (simId || 'default'));
+    if (!nickname) {
+      nickname = 'PLAYER ' + Math.floor(10 + Math.random() * 89);
+      localStorage.setItem('qrcon_nickname_' + (simId || 'default'), nickname);
+    }
+    nicknameInput.value = nickname;
+
+    let currentColor = null; // Assigned by server based on player order unless manually changed
     let peerConn = null;
+    let hasConnected = false;
 
     function vibrate(ms = 25) {
       if (navigator.vibrate) navigator.vibrate(ms);
     }
 
+    function applyColorTheme(color) {
+      currentColor = color;
+      stick.style.background = `radial-gradient(circle at 30% 30%, #ffffff, ${color})`;
+      stick.style.boxShadow = `0 8px 25px ${color}88`;
+      statusDot.style.background = color;
+      statusDot.style.boxShadow = `0 0 10px ${color}`;
+      document.querySelectorAll('.swatch').forEach((s) => {
+        s.classList.toggle('active', s.dataset.color.toLowerCase() === color.toLowerCase());
+      });
+    }
+
     function sendToScreen(event, payload = {}) {
       if (peerConn && peerConn.open) {
-        peerConn.send({ event, ...payload });
+        peerConn.send({
+          event,
+          playerId,
+          nickname: nicknameInput.value.trim() || nickname,
+          color: currentColor,
+          ...payload
+        });
       }
     }
 
-    // Connect to the PC Screen via PeerJS WebRTC (Works over LTE/5G/Wi-Fi anywhere!)
-    if (targetPeerId) {
+    function startConnection() {
+      if (hasConnected || !targetPeerId) return;
+      hasConnected = true;
+
       const peer = new Peer();
       peer.on('open', () => {
         peerConn = peer.connect(targetPeerId, { reliable: true });
         peerConn.on('open', () => {
-          connLabel.textContent = 'REMOTE PAD CONNECTED';
+          connLabel.textContent = 'ONLINE';
           vibrate([40, 60, 80]);
-          sendToScreen('join-controller', {
-            nickname: `PLAYER #${playerNumber}`,
-            color: currentColor
-          });
+          sendToScreen('join-controller');
+        });
+
+        peerConn.on('data', (msg) => {
+          if (msg && msg.event === 'assigned-profile') {
+            if (msg.color) applyColorTheme(msg.color);
+            if (msg.nickname) {
+              nickname = msg.nickname;
+              nicknameInput.value = msg.nickname;
+            }
+          }
         });
       });
-    } else {
-      connLabel.textContent = 'DEMO CONTROLLER';
     }
+
+    // Prevent iOS/Android camera QR preview (background pre-render) from creating a ghost connection
+    if (document.visibilityState === 'visible') {
+      startConnection();
+    } else {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          startConnection();
+        }
+      });
+    }
+
+    nicknameInput.addEventListener('change', () => {
+      const val = nicknameInput.value.trim();
+      if (val) {
+        nickname = val;
+        localStorage.setItem('qrcon_nickname_' + (simId || 'default'), nickname);
+        sendToScreen('controller-action', { type: 'profile', nickname });
+      }
+    });
 
     // Mode Tabs
     document.querySelectorAll('.mode-tab').forEach((tab) => {
@@ -364,14 +449,9 @@
     });
 
     // Color Palette
-    const stick = document.getElementById('joy-stick');
     document.querySelectorAll('.swatch').forEach((sw) => {
       sw.addEventListener('click', () => {
-        document.querySelectorAll('.swatch').forEach((s) => s.classList.remove('active'));
-        sw.classList.add('active');
-        currentColor = sw.dataset.color;
-        stick.style.background = `radial-gradient(circle at 30% 30%, #ffffff, ${currentColor})`;
-        stick.style.boxShadow = `0 8px 25px ${currentColor}88`;
+        applyColorTheme(sw.dataset.color);
         vibrate(20);
         sendToScreen('controller-action', { type: 'color', color: currentColor });
       });
@@ -400,8 +480,7 @@
       sendToScreen('controller-action', {
         type: 'joystick',
         dx: +(dx / maxDist).toFixed(2),
-        dy: +(dy / maxDist).toFixed(2),
-        color: currentColor
+        dy: +(dy / maxDist).toFixed(2)
       });
     }
 
@@ -411,8 +490,7 @@
       sendToScreen('controller-action', {
         type: 'joystick',
         dx: 0,
-        dy: 0,
-        color: currentColor
+        dy: 0
       });
     }
 
@@ -433,18 +511,12 @@
     // Splat & Firework Buttons
     document.getElementById('btn-splat').addEventListener('click', () => {
       vibrate(40);
-      sendToScreen('controller-action', {
-        type: 'splat',
-        color: currentColor
-      });
+      sendToScreen('controller-action', { type: 'splat' });
     });
 
     document.getElementById('btn-firework').addEventListener('click', () => {
       vibrate([30, 40, 50]);
-      sendToScreen('controller-action', {
-        type: 'firework',
-        color: currentColor
-      });
+      sendToScreen('controller-action', { type: 'firework' });
     });
 
     // Emoji Buttons
@@ -474,16 +546,9 @@
       vibrate(40);
       sendToScreen('controller-action', {
         type: 'message',
-        text,
-        color: currentColor
+        text
       });
       msgInput.value = '';
-    });
-
-    // Reset back to Lonely QR Screen
-    document.getElementById('reset-qr-btn').addEventListener('click', () => {
-      vibrate(30);
-      sendToScreen('reset-to-qr');
     });
   </script>
 </body>

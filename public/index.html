@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QR Portal</title>
-  <!-- PeerJS for Serverless WebRTC P2P communication (Works on GitHub Pages & LTE/5G!) -->
+  <title>QR Multi-Player Portal</title>
+  <!-- PeerJS for Serverless WebRTC P2P communication -->
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <!-- QRCode Generator in Browser -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -71,7 +71,6 @@
       border-radius: 8px;
     }
 
-    /* Subtle breathing pulse ring around the lonely QR */
     .qr-box::after {
       content: '';
       position: absolute;
@@ -137,9 +136,15 @@
       right: 32px;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       pointer-events: none;
       z-index: 10;
+    }
+
+    .hud-left {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
     }
 
     .badge-group {
@@ -190,6 +195,34 @@
       box-shadow: 0 0 24px rgba(0, 245, 212, 0.2);
     }
 
+    /* Connected Players Roster */
+    .player-roster {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-width: 600px;
+    }
+
+    .player-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      background: rgba(12, 15, 28, 0.75);
+      backdrop-filter: blur(8px);
+      border-radius: 999px;
+      border: 1.5px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .player-chip-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
     .hud-right {
       display: flex;
       align-items: center;
@@ -198,33 +231,67 @@
     }
 
     .score-pill {
-      padding: 8px 18px;
+      padding: 10px 20px;
       background: rgba(255, 255, 255, 0.07);
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 999px;
       color: #fee440;
-      font-weight: 700;
+      font-weight: 800;
       font-size: 15px;
       letter-spacing: 0.04em;
     }
 
-    .mini-qr-card {
+    /* Always-visible Join QR Card so new players can scan & join anytime! */
+    .join-qr-card {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 8px 14px;
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      gap: 12px;
+      padding: 8px 14px 8px 8px;
+      background: rgba(255, 255, 255, 0.09);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 16px;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+
+    .join-qr-card:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-2px);
+    }
+
+    #mini-qr-container {
+      width: 58px;
+      height: 58px;
+      background: #fff;
+      padding: 4px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #mini-qr-container img, #mini-qr-container canvas {
+      width: 50px !important;
+      height: 50px !important;
+      display: block !important;
+    }
+
+    .reset-btn {
+      padding: 10px 14px;
+      background: rgba(255, 89, 94, 0.15);
+      border: 1px solid rgba(255, 89, 94, 0.4);
       border-radius: 14px;
-      color: rgba(255, 255, 255, 0.85);
+      color: #ff595e;
       font-size: 12px;
+      font-weight: 700;
       cursor: pointer;
       transition: background 0.2s;
     }
 
-    .mini-qr-card:hover {
-      background: rgba(255, 255, 255, 0.16);
+    .reset-btn:hover {
+      background: rgba(255, 89, 94, 0.3);
     }
 
     /* Big Center Announcement Banner on Transformation */
@@ -246,7 +313,7 @@
     }
 
     #unlock-banner h1 {
-      font-size: 64px;
+      font-size: 60px;
       font-weight: 900;
       letter-spacing: -0.02em;
       background: linear-gradient(90deg, #00f5d4, #fee440, #f15bb5);
@@ -290,37 +357,42 @@
     <div class="sim-hint">스마트폰 카메라로 스캔하세요 (PC에서 바로 테스트하려면 QR 클릭)</div>
   </div>
 
-  <!-- 2. TRANSFORMED INTERACTIVE ARCADE & CANVAS STAGE -->
+  <!-- 2. TRANSFORMED MULTI-PLAYER INTERACTIVE STAGE -->
   <div id="arcade-stage">
     <div class="hud-top">
-      <div class="badge-group">
-        <div class="live-badge">
-          <span class="live-dot"></span>
-          <span id="player-status">CONTROLLER CONNECTED</span>
+      <div class="hud-left">
+        <div class="badge-group">
+          <div class="live-badge">
+            <span class="live-dot"></span>
+            <span id="player-status">1 PLAYER ONLINE</span>
+          </div>
+          <div class="mode-indicator" id="mode-badge">MODE: NEON CANVAS</div>
         </div>
-        <div class="mode-indicator" id="mode-badge">MODE: NEON CANVAS</div>
+        <div class="player-roster" id="player-roster"></div>
       </div>
 
       <div class="hud-right">
         <div class="score-pill" id="score-display">SCORE: 0</div>
-        <div class="mini-qr-card" id="reset-btn" title="클릭하면 처음 QR 페이지로 돌아갑니다">
+        <div class="join-qr-card" id="add-player-card" title="스마트폰으로 스캔하거나 클릭하여 새 플레이어 추가">
+          <div id="mini-qr-container"></div>
           <div>
-            <div style="font-weight:700; color:#fff;">🔄 첫 QR 화면으로</div>
-            <div style="font-size:11px; opacity:0.7;">클릭 시 초기화</div>
+            <div style="font-weight:800; font-size:13px; color:#00f5d4;">+ 멀티플레이 참여</div>
+            <div style="font-size:11px; opacity:0.75; margin-top:2px;">QR 스캔 시 내 커서 생성!</div>
           </div>
         </div>
+        <button class="reset-btn" id="reset-btn">처음으로</button>
       </div>
     </div>
 
     <div id="unlock-banner">
       <h1 id="banner-title">PORTAL UNLOCKED!</h1>
-      <p id="banner-sub">스마트폰으로 화면을 조종해보세요</p>
+      <p id="banner-sub">스마트폰으로 각자의 커서를 조종해보세요</p>
     </div>
 
     <canvas id="stage-canvas"></canvas>
 
     <div class="hud-bottom" id="hud-tip">
-      📱 스마트폰에서 조이스틱을 움직이거나 물감 폭탄·불꽃놀이·메시지를 발사하세요!
+      📱 여러 명이 우측 상단 QR을 찍고 들어오면 각자 자기만의 커서와 패들로 동시에 플레이할 수 있습니다!
     </div>
   </div>
 
@@ -328,8 +400,10 @@
     const qrStage = document.getElementById('qr-stage');
     const arcadeStage = document.getElementById('arcade-stage');
     const qrContainer = document.getElementById('qr-container');
+    const miniQrContainer = document.getElementById('mini-qr-container');
     const qrLoading = document.getElementById('qr-loading');
     const qrBox = document.getElementById('qr-box');
+    const addPlayerCard = document.getElementById('add-player-card');
     const resetBtn = document.getElementById('reset-btn');
     const unlockBanner = document.getElementById('unlock-banner');
     const bannerTitle = document.getElementById('banner-title');
@@ -337,11 +411,17 @@
     const modeBadge = document.getElementById('mode-badge');
     const scoreDisplay = document.getElementById('score-display');
     const playerStatus = document.getElementById('player-status');
+    const playerRoster = document.getElementById('player-roster');
 
     let controllerUrl = '';
     let isUnlocked = false;
     let currentMode = 'canvas'; // 'canvas' | 'arcade' | 'fireworks'
     let score = 0;
+
+    const PLAYER_PALETTE = ['#00f5d4', '#f15bb5', '#fee440', '#00bbf9', '#9b5de5', '#ff595e'];
+
+    // Multi-player state map: playerId -> player object
+    const players = new Map();
 
     // Web Audio Synth for sound effects
     let audioCtx = null;
@@ -410,12 +490,68 @@
       } catch (e) {}
     }
 
+    function updateRosterUI() {
+      const count = players.size;
+      playerStatus.textContent = `${count} PLAYER${count === 1 ? '' : 'S'} ONLINE`;
+      playerRoster.innerHTML = '';
+      players.forEach((p) => {
+        const chip = document.createElement('div');
+        chip.className = 'player-chip';
+        chip.style.borderColor = `${p.color}88`;
+        chip.innerHTML = `<span class="player-chip-dot" style="background:${p.color}; box-shadow: 0 0 8px ${p.color}"></span><span>${p.nickname}</span>`;
+        playerRoster.appendChild(chip);
+      });
+    }
+
+    function getOrCreatePlayer(playerId, nickname, preferredColor) {
+      if (players.has(playerId)) {
+        const existing = players.get(playerId);
+        if (nickname) existing.nickname = nickname;
+        if (preferredColor) existing.color = preferredColor;
+        updateRosterUI();
+        return { player: existing, isNew: false };
+      }
+
+      const playerIndex = players.size;
+      const assignedColor = preferredColor || PLAYER_PALETTE[playerIndex % PLAYER_PALETTE.length];
+      const assignedName = nickname || `P${playerIndex + 1}`;
+
+      // Spread initial spawn positions so cursors don't overlap
+      const angle = (playerIndex * Math.PI * 2) / 6;
+      const spawnRadius = Math.min(canvas.width, canvas.height) * 0.16;
+      const startX = canvas.width / 2 + Math.cos(angle) * spawnRadius;
+      const startY = canvas.height / 2 + Math.sin(angle) * spawnRadius;
+
+      const newPlayer = {
+        id: playerId,
+        nickname: assignedName,
+        color: assignedColor,
+        x: startX,
+        y: startY,
+        vx: 0,
+        vy: 0,
+        radius: 18,
+        paddleX: Math.max(40, Math.min(canvas.width - 200, startX - 80)),
+        paddleWidth: 160,
+        trail: [],
+        score: 0
+      };
+
+      players.set(playerId, newPlayer);
+      updateRosterUI();
+      return { player: newPlayer, isNew: true };
+    }
+
+    function removePlayer(playerId) {
+      if (players.has(playerId)) {
+        players.delete(playerId);
+        updateRosterUI();
+      }
+    }
+
     // ================= PEERJS (WEBRTC) SETUP =================
-    // Works across ANY network (Wi-Fi, LTE, 5G) and on GitHub Pages without a custom backend!
     const roomId = 'qrcon-' + Math.random().toString(36).substring(2, 9);
-    const peer = new Peer(roomId, {
-      debug: 1
-    });
+    const peer = new Peer(roomId, { debug: 1 });
 
     peer.on('open', (id) => {
       qrLoading.style.display = 'none';
@@ -431,55 +567,73 @@
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
       });
+
+      miniQrContainer.innerHTML = '';
+      new QRCode(miniQrContainer, {
+        text: controllerUrl,
+        width: 50,
+        height: 50,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.L
+      });
     });
 
     peer.on('connection', (conn) => {
+      let boundPlayerId = null;
+
       conn.on('data', (msg) => {
         if (!msg || !msg.event) return;
+        const pid = msg.playerId || conn.peer;
+        boundPlayerId = pid;
 
         if (msg.event === 'join-controller') {
-          if (!isUnlocked) {
-            unlockStage(msg.nickname || 'PLAYER 1');
-          } else {
-            showBanner(`${msg.nickname || 'NEW PLAYER'} JOINED!`, '새로운 컨트롤러가 연결되었습니다');
-            spawnFirework(canvas.width / 2, canvas.height / 2, msg.color || '#00f5d4', 70);
+          const { player, isNew } = getOrCreatePlayer(pid, msg.nickname, msg.color);
+
+          // Send assigned color & player info back to phone so phone UI matches!
+          if (conn.open) {
+            conn.send({
+              event: 'assigned-profile',
+              nickname: player.nickname,
+              color: player.color
+            });
           }
-          playerStatus.textContent = `${msg.nickname || 'PLAYER 1'} LIVE`;
+
+          if (!isUnlocked) {
+            unlockStage(player.nickname);
+          } else if (isNew) {
+            showBanner(`${player.nickname} 참전! 🎮`, '각자의 커서를 동시에 조종할 수 있습니다');
+            spawnFirework(player.x, player.y, player.color, 65);
+          }
         } else if (msg.event === 'switch-mode') {
           switchMode(msg.mode);
         } else if (msg.event === 'reset-to-qr') {
           resetToLonelyQr();
         } else if (msg.event === 'controller-action') {
-          handleControllerAction(msg);
+          handleControllerAction(pid, msg);
         }
+      });
+
+      conn.on('close', () => {
+        if (boundPlayerId) removePlayer(boundPlayerId);
       });
     });
 
-    // Optional Socket.io fallback when running local node server.js
-    if (typeof io !== 'undefined') {
-      try {
-        const socket = io();
-        socket.emit('join-screen', roomId);
-        socket.on('qr-triggered', (data) => {
-          if (!isUnlocked) unlockStage(data.nickname || 'PLAYER 1');
-        });
-        socket.on('mode-switched', (data) => switchMode(data.mode));
-        socket.on('reset-screen', () => resetToLonelyQr());
-        socket.on('screen-action', (payload) => handleControllerAction(payload));
-      } catch (e) {}
-    }
-
-    // Clicking the QR on PC opens a simulated phone controller popup for instant testing
-    qrBox.addEventListener('click', () => {
+    // Clicking the QR on PC opens a simulated phone controller popup (with unique sim ID each click!)
+    function openSimController() {
       initAudio();
       if (controllerUrl) {
+        const simId = 'sim-' + Math.random().toString(36).substring(2, 7);
         window.open(
-          controllerUrl,
-          'PhoneController',
-          'width=410,height=780,left=100,top=80'
+          `${controllerUrl}&sim=${simId}`,
+          `PhoneController_${simId}`,
+          `width=410,height=780,left=${80 + players.size * 40},top=${80 + players.size * 30}`
         );
       }
-    });
+    }
+
+    qrBox.addEventListener('click', openSimController);
+    addPlayerCard.addEventListener('click', openSimController);
 
     resetBtn.addEventListener('click', () => {
       resetToLonelyQr();
@@ -491,7 +645,7 @@
       unlockBanner.classList.add('show');
       setTimeout(() => {
         unlockBanner.classList.remove('show');
-      }, 2400);
+      }, 2200);
     }
 
     function unlockStage(nickname) {
@@ -499,14 +653,14 @@
       qrStage.classList.add('unlocked');
       arcadeStage.classList.add('active');
       playSound('unlock');
-      showBanner('PORTAL UNLOCKED!', `${nickname}님의 스마트폰이 컨트롤러로 연결되었습니다`);
+      showBanner('PORTAL UNLOCKED!', `${nickname}님이 스테이지를 열었습니다!`);
 
       for (let i = 0; i < 4; i++) {
         setTimeout(() => {
           spawnFirework(
             canvas.width * (0.25 + Math.random() * 0.5),
             canvas.height * (0.25 + Math.random() * 0.4),
-            ['#00f5d4', '#fee440', '#f15bb5', '#9b5de5', '#00bbf9'][i % 5],
+            PLAYER_PALETTE[i % PLAYER_PALETTE.length],
             65
           );
         }, i * 180);
@@ -522,9 +676,15 @@
       floatingTexts.length = 0;
     }
 
-    // ================= CANVAS & ARCADE ENGINE =================
+    // ================= MULTI-PLAYER CANVAS & ARCADE ENGINE =================
     const canvas = document.getElementById('stage-canvas');
     const ctx = canvas.getContext('2d');
+
+    const particles = [];
+    const splats = [];
+    const floatingTexts = [];
+    const ball = { x: 500, y: 400, vx: 6, vy: -6, radius: 11, lastHitColor: '#00f5d4' };
+    let bricks = [];
 
     function resize() {
       canvas.width = window.innerWidth;
@@ -533,35 +693,16 @@
     }
     window.addEventListener('resize', resize);
 
-    const cursor = {
-      x: window.innerWidth / 2,
-      y: window.innerHeight / 2,
-      vx: 0,
-      vy: 0,
-      color: '#00f5d4',
-      radius: 18,
-      trail: []
-    };
-
-    const particles = [];
-    const splats = [];
-    const floatingTexts = [];
-
-    const paddle = { width: 170, height: 18, x: 400 };
-    const ball = { x: 500, y: 400, vx: 6, vy: -6, radius: 11 };
-    let bricks = [];
-
     function initBricks() {
       bricks = [];
       const rows = 5;
       const cols = 9;
       const pad = 12;
-      const offsetTop = 110;
+      const offsetTop = 120;
       const offsetLeft = 80;
       const totalW = canvas.width - offsetLeft * 2;
       const brickW = (totalW - pad * (cols - 1)) / cols;
       const brickH = 28;
-      const palette = ['#f15bb5', '#fee440', '#00f5d4', '#00bbf9', '#9b5de5'];
 
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
@@ -570,14 +711,13 @@
             y: offsetTop + r * (brickH + pad),
             w: brickW,
             h: brickH,
-            color: palette[r % palette.length],
+            color: PLAYER_PALETTE[r % PLAYER_PALETTE.length],
             alive: true
           });
         }
       }
-      paddle.x = canvas.width / 2 - paddle.width / 2;
       ball.x = canvas.width / 2;
-      ball.y = canvas.height - 120;
+      ball.y = canvas.height - 140;
       ball.vx = 6 * (Math.random() > 0.5 ? 1 : -1);
       ball.vy = -6.5;
     }
@@ -587,15 +727,15 @@
     function switchMode(mode) {
       currentMode = mode;
       if (mode === 'canvas') {
-        modeBadge.textContent = 'MODE: NEON GRAFFITI CANVAS';
-        showBanner('NEON GRAFFITI', '조이스틱으로 그림을 그리고 물감 폭탄을 던지세요!');
+        modeBadge.textContent = 'MODE: MULTI GRAFFITI CANVAS';
+        showBanner('MULTI GRAFFITI', '모두 각자의 브러시로 동시에 그림을 그리고 물감 폭탄을 던지세요!');
       } else if (mode === 'arcade') {
-        modeBadge.textContent = 'MODE: BRICK BREAKER ARCADE';
+        modeBadge.textContent = 'MODE: CO-OP BRICK BREAKER';
         initBricks();
-        showBanner('ARCADE START!', '폰 조이스틱을 좌우로 움직여 공을 튕기세요!');
+        showBanner('CO-OP ARCADE!', '여러 명이 각자의 패들을 움직여 협동으로 벽돌을 깨세요!');
       } else if (mode === 'fireworks') {
         modeBadge.textContent = 'MODE: SKY FIREWORKS SHOW';
-        showBanner('FIREWORKS SHOW', '폰에서 대형 불꽃을 쏘아올리세요!');
+        showBanner('FIREWORKS SHOW', '다 함께 밤하늘에 불꽃을 쏘아올리세요!');
       }
       playSound('unlock');
     }
@@ -621,7 +761,7 @@
     function spawnPaintSplat(x, y, color) {
       playSound('splat');
       const blobs = [];
-      const mainRadius = 28 + Math.random() * 34;
+      const mainRadius = 26 + Math.random() * 32;
       for (let i = 0; i < 14; i++) {
         const ang = Math.random() * Math.PI * 2;
         const dist = mainRadius * (0.6 + Math.random() * 0.9);
@@ -631,43 +771,44 @@
           r: 4 + Math.random() * 14
         });
       }
-      splats.push({ x, y, r: mainRadius, color, blobs, createdAt: Date.now() });
-      if (splats.length > 60) splats.shift();
+      splats.push({ x, y, r: mainRadius, color, blobs });
+      if (splats.length > 80) splats.shift();
 
       score += 10;
       scoreDisplay.textContent = `SCORE: ${score}`;
     }
 
-    function handleControllerAction(payload) {
+    function handleControllerAction(playerId, payload) {
+      const { player } = getOrCreatePlayer(playerId, payload.nickname, payload.color);
+
       if (!isUnlocked) {
-        unlockStage(payload.nickname || 'PLAYER 1');
+        unlockStage(player.nickname);
       }
 
       if (payload.color) {
-        cursor.color = payload.color;
+        player.color = payload.color;
+        updateRosterUI();
+      }
+      if (payload.nickname && payload.nickname !== player.nickname) {
+        player.nickname = payload.nickname;
+        updateRosterUI();
       }
 
       switch (payload.type) {
         case 'joystick': {
-          cursor.vx = payload.dx * 12;
-          cursor.vy = payload.dy * 12;
+          player.vx = payload.dx * 12;
+          player.vy = payload.dy * 12;
           break;
         }
         case 'splat': {
-          const tx = payload.randomPos
-            ? canvas.width * (0.15 + Math.random() * 0.7)
-            : cursor.x;
-          const ty = payload.randomPos
-            ? canvas.height * (0.2 + Math.random() * 0.6)
-            : cursor.y;
-          spawnPaintSplat(tx, ty, cursor.color);
-          spawnFirework(tx, ty, cursor.color, 25);
+          spawnPaintSplat(player.x, player.y, player.color);
+          spawnFirework(player.x, player.y, player.color, 25);
           break;
         }
         case 'firework': {
-          const fx = canvas.width * (0.15 + Math.random() * 0.7);
-          const fy = canvas.height * (0.15 + Math.random() * 0.5);
-          spawnFirework(fx, fy, payload.color || cursor.color, 70);
+          const fx = player.x + (Math.random() - 0.5) * 180;
+          const fy = Math.max(120, player.y - 100 - Math.random() * 150);
+          spawnFirework(fx, fy, player.color, 70);
           score += 25;
           scoreDisplay.textContent = `SCORE: ${score}`;
           break;
@@ -675,32 +816,32 @@
         case 'emoji': {
           floatingTexts.push({
             text: payload.emoji || '🚀',
-            x: cursor.x + (Math.random() - 0.5) * 80,
-            y: cursor.y,
+            x: player.x + (Math.random() - 0.5) * 40,
+            y: player.y - 20,
             vy: -3.5 - Math.random() * 2,
             alpha: 1,
-            size: 54
+            size: 52
           });
           playSound('hit');
           break;
         }
         case 'message': {
           floatingTexts.push({
-            text: payload.text,
-            x: canvas.width / 2 + (Math.random() - 0.5) * 240,
-            y: canvas.height * 0.75,
+            text: `${player.nickname}: ${payload.text}`,
+            x: player.x,
+            y: player.y - 30,
             vy: -2.2,
             alpha: 1,
-            size: 42,
-            color: cursor.color
+            size: 34,
+            color: player.color
           });
-          spawnFirework(canvas.width / 2, canvas.height * 0.4, cursor.color, 50);
+          spawnFirework(player.x, player.y, player.color, 45);
           break;
         }
         case 'clear': {
           splats.length = 0;
-          cursor.trail.length = 0;
-          showBanner('CANVAS CLEARED', '캔버스가 깨끗하게 초기화되었습니다');
+          players.forEach((p) => (p.trail.length = 0));
+          showBanner('CANVAS CLEARED', `${player.nickname}님이 캔버스를 초기화했습니다`);
           break;
         }
       }
@@ -713,27 +854,7 @@
       ctx.fillStyle = currentMode === 'fireworks' ? 'rgba(7, 8, 16, 0.22)' : 'rgba(10, 12, 24, 0.35)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      cursor.x = Math.max(24, Math.min(canvas.width - 24, cursor.x + cursor.vx));
-      cursor.y = Math.max(24, Math.min(canvas.height - 24, cursor.y + cursor.vy));
-
-      if (Math.hypot(cursor.vx, cursor.vy) > 0.5) {
-        cursor.trail.push({ x: cursor.x, y: cursor.y, color: cursor.color, life: 1 });
-        if (cursor.trail.length > 80) cursor.trail.shift();
-
-        if (currentMode === 'fireworks' && Math.random() < 0.25) {
-          particles.push({
-            x: cursor.x,
-            y: cursor.y,
-            vx: (Math.random() - 0.5) * 4,
-            vy: (Math.random() - 0.5) * 4,
-            color: cursor.color,
-            alpha: 1,
-            size: 3,
-            gravity: 0.04
-          });
-        }
-      }
-
+      // 1. Draw Paint Splats (in Canvas mode)
       if (currentMode === 'canvas') {
         for (const s of splats) {
           ctx.save();
@@ -753,17 +874,103 @@
         }
       }
 
-      if (currentMode === 'arcade') {
-        paddle.x = Math.max(20, Math.min(canvas.width - paddle.width - 20, paddle.x + cursor.vx * 1.4));
+      // 2. Update each player's independent cursor & trail
+      players.forEach((p) => {
+        p.x = Math.max(28, Math.min(canvas.width - 28, p.x + p.vx));
+        p.y = Math.max(28, Math.min(canvas.height - 28, p.y + p.vy));
+        p.paddleX = Math.max(20, Math.min(canvas.width - p.paddleWidth - 20, p.paddleX + p.vx * 1.4));
 
-        ctx.save();
-        ctx.fillStyle = cursor.color;
-        ctx.shadowColor = cursor.color;
-        ctx.shadowBlur = 20;
-        ctx.beginPath();
-        ctx.roundRect(paddle.x, canvas.height - 75, paddle.width, paddle.height, 9);
-        ctx.fill();
-        ctx.restore();
+        if (Math.hypot(p.vx, p.vy) > 0.5) {
+          p.trail.push({ x: p.x, y: p.y, color: p.color, life: 1 });
+          if (p.trail.length > 65) p.trail.shift();
+
+          if (currentMode === 'fireworks' && Math.random() < 0.28) {
+            particles.push({
+              x: p.x,
+              y: p.y,
+              vx: (Math.random() - 0.5) * 4,
+              vy: (Math.random() - 0.5) * 4,
+              color: p.color,
+              alpha: 1,
+              size: 3,
+              gravity: 0.04
+            });
+          }
+        }
+
+        // Draw Player Trail
+        for (let i = 0; i < p.trail.length; i++) {
+          const t = p.trail[i];
+          t.life -= 0.018;
+          if (t.life <= 0) continue;
+          ctx.save();
+          ctx.fillStyle = t.color;
+          ctx.globalAlpha = t.life * 0.7;
+          ctx.beginPath();
+          ctx.arc(t.x, t.y, 10 * t.life, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
+        // Draw Player Cursor + Nickname Tag (in Canvas & Fireworks mode)
+        if (currentMode !== 'arcade') {
+          ctx.save();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 3;
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 24;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+
+          // Player Nickname Tag above cursor
+          ctx.font = '800 13px Pretendard, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowBlur = 8;
+          ctx.fillText(p.nickname, p.x, p.y - p.radius - 10);
+          ctx.restore();
+        }
+      });
+
+      // 3. Co-op Arcade Brick Breaker (Each player has their own paddle!)
+      if (currentMode === 'arcade') {
+        const paddleY = canvas.height - 78;
+        const paddleH = 18;
+
+        players.forEach((p) => {
+          ctx.save();
+          ctx.fillStyle = p.color;
+          ctx.shadowColor = p.color;
+          ctx.shadowBlur = 20;
+          ctx.beginPath();
+          ctx.roundRect(p.paddleX, paddleY, p.paddleWidth, paddleH, 9);
+          ctx.fill();
+
+          ctx.font = '800 12px Pretendard, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(p.nickname, p.paddleX + p.paddleWidth / 2, paddleY + 34);
+          ctx.restore();
+
+          // Check ball collision with this player's paddle
+          if (
+            ball.vy > 0 &&
+            ball.y + ball.radius >= paddleY &&
+            ball.y - ball.radius <= paddleY + paddleH &&
+            ball.x >= p.paddleX &&
+            ball.x <= p.paddleX + p.paddleWidth
+          ) {
+            const hitOffset = (ball.x - (p.paddleX + p.paddleWidth / 2)) / (p.paddleWidth / 2);
+            ball.vx = hitOffset * 8.5;
+            ball.vy = -Math.abs(ball.vy);
+            ball.lastHitColor = p.color;
+            playSound('hit');
+            spawnFirework(ball.x, ball.y, p.color, 18);
+          }
+        });
 
         ball.x += ball.vx;
         ball.y += ball.vy;
@@ -777,23 +984,10 @@
           playSound('hit');
         }
 
-        if (
-          ball.vy > 0 &&
-          ball.y + ball.radius >= canvas.height - 75 &&
-          ball.y - ball.radius <= canvas.height - 75 + paddle.height &&
-          ball.x >= paddle.x &&
-          ball.x <= paddle.x + paddle.width
-        ) {
-          const hitOffset = (ball.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
-          ball.vx = hitOffset * 8.5;
-          ball.vy = -Math.abs(ball.vy);
-          playSound('hit');
-          spawnFirework(ball.x, ball.y, cursor.color, 18);
-        }
-
         if (ball.y > canvas.height + 30) {
-          ball.x = paddle.x + paddle.width / 2;
-          ball.y = canvas.height - 110;
+          const firstPlayer = players.values().next().value;
+          ball.x = firstPlayer ? firstPlayer.paddleX + firstPlayer.paddleWidth / 2 : canvas.width / 2;
+          ball.y = canvas.height - 120;
           ball.vy = -6.5;
         }
 
@@ -827,14 +1021,14 @@
 
         if (aliveCount === 0) {
           initBricks();
-          showBanner('STAGE CLEAR! 🎉', '보너스 +500점 획득!');
+          showBanner('STAGE CLEAR! 🎉', '협동 보너스 +500점 획득!');
           score += 500;
           scoreDisplay.textContent = `SCORE: ${score}`;
         }
 
         ctx.save();
         ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#00f5d4';
+        ctx.shadowColor = ball.lastHitColor;
         ctx.shadowBlur = 18;
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
@@ -842,33 +1036,7 @@
         ctx.restore();
       }
 
-      for (let i = 0; i < cursor.trail.length; i++) {
-        const t = cursor.trail[i];
-        t.life -= 0.016;
-        if (t.life <= 0) continue;
-        ctx.save();
-        ctx.fillStyle = t.color;
-        ctx.globalAlpha = t.life * 0.7;
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, 10 * t.life, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      if (currentMode !== 'arcade') {
-        ctx.save();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3;
-        ctx.fillStyle = cursor.color;
-        ctx.shadowColor = cursor.color;
-        ctx.shadowBlur = 24;
-        ctx.beginPath();
-        ctx.arc(cursor.x, cursor.y, cursor.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
-      }
-
+      // 4. Firework Particles
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
         p.x += p.vx;
@@ -893,6 +1061,7 @@
         ctx.restore();
       }
 
+      // 5. Floating Emojis & Messages
       for (let i = floatingTexts.length - 1; i >= 0; i--) {
         const ft = floatingTexts[i];
         ft.y += ft.vy;

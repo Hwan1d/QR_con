@@ -339,6 +339,18 @@
         도슨트 비평 로딩 중...
       </div>
     </div>
+
+    <!-- 🤖 AI 아티스트 실시간 드로잉 PIP (Picture-in-Picture) 보조 윈도우 -->
+    <div id="ai-pip-card" style="display: none; position: fixed; right: 20px; bottom: 24px; width: 320px; height: 230px; background: rgba(18, 12, 34, 0.95); border: 2px solid #a855f7; border-radius: 16px; box-shadow: 0 12px 35px rgba(168, 85, 247, 0.45); z-index: 100; overflow: hidden; backdrop-filter: blur(10px); transition: opacity 0.3s ease;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:rgba(168,85,247,0.25); border-bottom:1px solid rgba(168,85,247,0.3);">
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#ff0055; box-shadow:0 0 8px #ff0055;"></span>
+          <span style="font-size:12px; font-weight:800; color:#faf5ff;" id="ai-pip-title">🤖 AI 드로잉 LIVE 중계</span>
+        </div>
+        <span id="ai-pip-prompt" style="font-size:10px; background:rgba(0,245,212,0.2); color:#00f5d4; padding:2px 6px; border-radius:6px; font-weight:700; max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">그리는 중</span>
+      </div>
+      <canvas id="ai-pip-canvas" width="320" height="190" style="display:block; width:100%; height:190px;"></canvas>
+    </div>
   </div>
 
   <!-- 방 전용 QR 팝업 모달 -->
@@ -891,9 +903,10 @@
       if (document.getElementById('game-screen').style.display === 'block') {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 내 캐릭터 추적 고정 (플레이어 중 하나를 카메라 중심으로 부드럽게 보간 이동)
-        if (livePlayers.length > 0) {
-          const targetPlayer = livePlayers[livePlayers.length - 1]; // 최근 활성 플레이어
+        // 내 캐릭터 추적 고정: AI 봇은 절대 추적하지 않고, 실제 유저 캐릭터만 추적!
+        const humanPlayers = livePlayers.filter(p => !p.isAi);
+        if (humanPlayers.length > 0) {
+          const targetPlayer = humanPlayers[humanPlayers.length - 1]; // 최근 활성 유저
           const lerp = 0.08;
           camera.x += (targetPlayer.x - camera.x) * lerp;
           camera.y += (targetPlayer.y - camera.y) * lerp;
@@ -1011,10 +1024,69 @@
 
         ctx.restore();
         renderMinimap();
+        renderAiPip();
       }
       requestAnimationFrame(render);
     }
     requestAnimationFrame(render);
+
+    function renderAiPip() {
+      const activeAiBot = livePlayers.find(p => p.isAi);
+      const pipCard = document.getElementById('ai-pip-card');
+      if (activeAiBot) {
+        if (pipCard.style.display === 'none') pipCard.style.display = 'block';
+        document.getElementById('ai-pip-title').innerText = `🤖 ${activeAiBot.nickname} 드로잉 LIVE`;
+        if (activeAiBot.bubbleText) {
+          document.getElementById('ai-pip-prompt').innerText = activeAiBot.bubbleText.replace('🎨 ', '').replace(' 그리는 중!', '');
+        }
+
+        const pipCanvas = document.getElementById('ai-pip-canvas');
+        const pCtx = pipCanvas.getContext('2d');
+        pCtx.clearRect(0, 0, pipCanvas.width, pipCanvas.height);
+
+        pCtx.save();
+        pCtx.translate(pipCanvas.width / 2, pipCanvas.height / 2);
+        // AI 봇을 적절한 배율(1.6x)로 클로즈업
+        const pipZoom = 1.6;
+        pCtx.scale(pipZoom, pipZoom);
+        pCtx.translate(-activeAiBot.x, -activeAiBot.y);
+
+        // 캔버스 배경 및 전체 선 렌더링
+        pCtx.drawImage(graffitiCanvas, 0, 0);
+
+        // AI 봇 아티스트 본체 렌더링
+        pCtx.save();
+        pCtx.translate(activeAiBot.x, activeAiBot.y);
+        pCtx.beginPath();
+        pCtx.arc(0, 0, 16, 0, Math.PI * 2);
+        pCtx.fillStyle = activeAiBot.color || '#a855f7';
+        pCtx.shadowColor = activeAiBot.color || '#a855f7';
+        pCtx.shadowBlur = 18;
+        pCtx.fill();
+
+        // 봇 눈 모양
+        pCtx.fillStyle = '#ffffff';
+        pCtx.beginPath();
+        pCtx.arc(-5, -3, 3, 0, Math.PI * 2);
+        pCtx.arc(5, -3, 3, 0, Math.PI * 2);
+        pCtx.fill();
+
+        // 봇 말풍선
+        if (activeAiBot.bubbleText) {
+          pCtx.font = 'bold 12px sans-serif';
+          pCtx.fillStyle = '#ffffff';
+          pCtx.textAlign = 'center';
+          pCtx.shadowColor = '#000000';
+          pCtx.shadowBlur = 6;
+          pCtx.fillText(activeAiBot.bubbleText, 0, -24);
+        }
+        pCtx.restore();
+
+        pCtx.restore();
+      } else {
+        if (pipCard.style.display !== 'none') pipCard.style.display = 'none';
+      }
+    }
 
     function renderMinimap() {
       miniCtx.clearRect(0, 0, 180, 135);

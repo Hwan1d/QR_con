@@ -752,28 +752,52 @@ app.post('/api/ai/request-drawing', async (req, res) => {
   if (!room) return res.status(404).json({ error: '방을 찾을 수 없습니다.' });
   if (!prompt || !prompt.trim()) return res.status(400).json({ error: '그릴 주제를 입력해주세요.' });
 
-  // 봇이 없으면 하나 소환
-  if (!roomAiBots[code] || roomAiBots[code].length === 0) {
-    const defaultBot = {
-      id: `ai-bot-${Date.now()}-1`,
-      room: code,
-      nickname: 'Pixel_Banksy',
-      color: '#00bbf9',
-      x: 2000,
-      y: 1500,
-      angle: 0,
-      speed: 4.5,
-      isDrawing: true,
-      isAi: true,
-      turnTimer: 0,
-      prevX: null,
-      prevY: null
-    };
-    if (!roomAiBots[code]) roomAiBots[code] = [];
-    roomAiBots[code].push(defaultBot);
+  // AI 아티스트 봇 소환/준비
+  const botNames = ['Cyber_Picasso', 'Pixel_Banksy', 'Neon_VanGogh', 'Digital_Warhol', 'Retro_Basquiat'];
+  const botColors = ['#c084fc', '#00f5d4', '#f15bb5', '#fee440', '#00bbf9'];
+  const chosenName = botNames[Math.floor(Math.random() * botNames.length)];
+  const chosenColor = botColors[Math.floor(Math.random() * botColors.length)];
+
+  if (!roomAiBots[code]) roomAiBots[code] = [];
+
+  // 스폰 위치: 유저의 현재 위치 근처에 자연스럽게 등장
+  const playersInRoom = Object.values(roomPlayers[code] || {});
+  let spawnX = 2000, spawnY = 1500;
+  if (playersInRoom.length > 0) {
+    const refP = playersInRoom[0];
+    const offsetAngle = Math.random() * Math.PI * 2;
+    spawnX = Math.max(400, Math.min(WORLD_WIDTH - 400, Math.round(refP.x + Math.cos(offsetAngle) * 350)));
+    spawnY = Math.max(400, Math.min(WORLD_HEIGHT - 400, Math.round(refP.y + Math.sin(offsetAngle) * 350)));
   }
 
-  const bot = roomAiBots[code][0];
+  let bot = roomAiBots[code].find(b => b.isAi);
+  if (!bot) {
+    bot = {
+      id: `ai-artist-${Date.now()}`,
+      room: code,
+      nickname: chosenName,
+      color: chosenColor,
+      x: spawnX,
+      y: spawnY,
+      angle: 0,
+      speed: 6.8,
+      isDrawing: true,
+      isAi: true,
+      isTemporary: true, // 그림 완성 후 자동 퇴장 플래그
+      turnTimer: 0,
+      prevX: spawnX,
+      prevY: spawnY
+    };
+    roomAiBots[code].push(bot);
+  } else {
+    bot.x = spawnX;
+    bot.y = spawnY;
+    bot.prevX = spawnX;
+    bot.prevY = spawnY;
+    bot.isTemporary = true;
+    bot.color = chosenColor;
+    bot.nickname = chosenName;
+  }
 
   const geminiPrompt = `주제: "${prompt.trim()}".
 이 주제의 형태를 2D 캔버스에 그리기 위해 연결되는 2D 상대 벡터 좌표 리스트를 순수한 JSON 배열 포맷으로 작성하세요.
@@ -807,11 +831,13 @@ app.post('/api/ai/request-drawing', async (req, res) => {
     const startX = bot.x;
     const startY = bot.y;
     bot.drawingSequence = points.map(pt => ({
-      x: Math.max(100, Math.min(WORLD_WIDTH - 100, startX + (pt.dx || 0) * 2.0)),
-      y: Math.max(100, Math.min(WORLD_HEIGHT - 100, startY + (pt.dy || 0) * 2.0))
+      x: Math.max(100, Math.min(WORLD_WIDTH - 100, startX + (pt.dx || 0) * 2.2)),
+      y: Math.max(100, Math.min(WORLD_HEIGHT - 100, startY + (pt.dy || 0) * 2.2))
     }));
     bot.bubbleText = `🎨 "${prompt.trim()}" 그리는 중!`;
-    bot.bubbleTimer = 260;
+    bot.bubbleTimer = 350;
+    bot.requestedPrompt = prompt.trim();
+    bot.exitCountdown = null;
 
     // PBL 04 감사 로그 기록
     const now = new Date().toTimeString().split(' ')[0];
@@ -1093,18 +1119,33 @@ setInterval(() => {
         const tdx = target.x - bot.x;
         const tdy = target.y - bot.y;
         const dist = Math.hypot(tdx, tdy);
-        if (dist < 18) {
+        if (dist < 22) {
           bot.drawingSequence.shift();
           if (bot.drawingSequence.length === 0) {
-            bot.bubbleText = '✨ 그림 완성!';
-            bot.bubbleTimer = 120;
+            bot.bubbleText = `✨ "${bot.requestedPrompt || '작품'}" 완성! 안녕! 👋`;
+            bot.bubbleTimer = 100;
+            if (bot.isTemporary) {
+              bot.exitCountdown = 60; // 약 1.5초간 완성작 감상 후 퇴장
+            }
           }
         } else {
           bot.angle = Math.atan2(tdy, tdx);
-          bot.speed = 5.2;
+          bot.speed = 6.8;
         }
+      } else if (bot.exitCountdown !== null && bot.exitCountdown !== undefined) {
+        bot.exitCountdown--;
+        bot.speed = 0.5;
+        if (bot.exitCountdown <= 0) {
+          console.log(`👋 [AI Artist] ${bot.nickname} finished drawing and exited room [${room}]`);
+          roomAiBots[room] = roomAiBots[room].filter(b => b.id !== bot.id);
+          continue;
+        }
+      } else if (bot.isTemporary) {
+        // 할 일을 마친 임시 봇 퇴장
+        roomAiBots[room] = roomAiBots[room].filter(b => b.id !== bot.id);
+        continue;
       } else {
-        // 일반 자율 배회
+        // 일반 자율 배회 (관리자 소환 봇)
         bot.turnTimer = (bot.turnTimer || 0) + 1;
         if (bot.turnTimer > 30) {
           bot.angle += (Math.random() - 0.5) * 0.8;

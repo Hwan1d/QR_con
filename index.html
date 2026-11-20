@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QR Multi-Player Portal</title>
-  <!-- PeerJS for Serverless WebRTC P2P communication -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <!-- QRCode Generator in Browser -->
+  <title>Infinite Graffiti Rooms & Art Platform</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="supabase-adapter.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -20,1109 +20,1093 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background-color: #fafafa;
-      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      transition: background-color 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      background: #090b12;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* ================= STATE 1: LONELY QR VIEW ================= */
-    #qr-stage {
+    /* ====================================================
+       1. 첫 화면: 로그인 & 룸 로비 (Lobby View)
+       ==================================================== */
+    #lobby-screen {
       position: absolute;
       inset: 0;
+      background: radial-gradient(circle at 50% 30%, #161b2e 0%, #080a10 100%);
       display: flex;
       flex-direction: column;
+      z-index: 500;
+      overflow-y: auto;
+      padding: 30px 40px;
+    }
+
+    .lobby-header {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      justify-content: center;
-      background: #fafafa;
-      z-index: 20;
-      transition: opacity 0.7s ease, transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+      padding-bottom: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 30px;
     }
 
-    #qr-stage.unlocked {
-      opacity: 0;
-      transform: scale(2.4) rotate(8deg);
-      pointer-events: none;
-    }
-
-    .qr-box {
-      position: relative;
-      padding: 24px;
-      background: #ffffff;
-      border-radius: 28px;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0,0,0,0.04);
-      cursor: pointer;
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    .brand-title {
+      font-size: 24px;
+      font-weight: 900;
+      background: linear-gradient(135deg, #00f5d4, #00bbf9);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
       display: flex;
       align-items: center;
-      justify-content: center;
-      min-width: 308px;
-      min-height: 308px;
+      gap: 10px;
     }
 
-    .qr-box:hover {
-      transform: translateY(-4px) scale(1.02);
-      box-shadow: 0 28px 70px rgba(0, 0, 0, 0.12);
+    .lobby-user-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
     }
 
-    #qr-container img, #qr-container canvas {
-      display: block !important;
-      width: 260px !important;
-      height: 260px !important;
-      border-radius: 8px;
+    .btn-create-room {
+      background: linear-gradient(135deg, #00f5d4, #00bbf9);
+      color: #05070d;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(0, 245, 212, 0.3);
+      transition: transform 0.2s;
+    }
+    .btn-create-room:hover { transform: scale(1.03); }
+
+    /* 룸 카드 그리드 */
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
     }
 
-    .qr-box::after {
-      content: '';
-      position: absolute;
-      inset: -10px;
-      border-radius: 34px;
-      border: 1.5px solid rgba(0, 0, 0, 0.06);
-      animation: breathe 3s infinite ease-in-out;
-      pointer-events: none;
+    .room-card {
+      background: rgba(25, 30, 48, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 18px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.25s;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 160px;
+      backdrop-filter: blur(8px);
+    }
+    .room-card:hover {
+      transform: translateY(-4px);
+      border-color: #00f5d4;
+      box-shadow: 0 10px 30px rgba(0, 245, 212, 0.2);
+    }
+    .room-card.secret {
+      border-color: rgba(192, 132, 252, 0.4);
+    }
+    .room-card.secret:hover {
+      border-color: #c084fc;
+      box-shadow: 0 10px 30px rgba(192, 132, 252, 0.25);
     }
 
-    @keyframes breathe {
-      0%, 100% { transform: scale(1); opacity: 0.6; }
-      50% { transform: scale(1.04); opacity: 0; }
-    }
-
-    .loading-text {
-      font-size: 13px;
-      color: #999;
-      position: absolute;
-    }
-
-    .sim-hint {
-      position: fixed;
-      bottom: 18px;
-      font-size: 12px;
-      color: #c0c0c0;
-      letter-spacing: 0.04em;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-
-    #qr-stage:hover .sim-hint {
-      opacity: 1;
-    }
-
-    /* ================= STATE 2: TRANSFORMED STAGE ================= */
-    #arcade-stage {
+    /* ====================================================
+       2. 인게임 화면: 대형 캔버스 & 카메라 팔로우
+       ==================================================== */
+    #game-screen {
+      display: none;
       position: absolute;
       inset: 0;
-      background: radial-gradient(circle at 50% 40%, #15192b 0%, #070810 100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.8s ease;
-      overflow: hidden;
     }
 
-    #arcade-stage.active {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    #stage-canvas {
-      display: block;
+    #world-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
     }
 
-    /* HUD Overlay on Big Screen */
-    .hud-top {
-      position: absolute;
-      top: 24px;
-      left: 32px;
-      right: 32px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      pointer-events: none;
-      z-index: 10;
-    }
-
-    .hud-left {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .badge-group {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .live-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
+    /* 상단 헤더 HUD */
+    .game-hud-top {
+      position: fixed;
+      top: 18px;
+      left: 20px;
+      background: rgba(15, 18, 30, 0.85);
+      border: 1px solid rgba(0, 245, 212, 0.3);
+      border-radius: 16px;
       padding: 8px 16px;
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 999px;
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-    }
-
-    .live-dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: #00f5d4;
-      box-shadow: 0 0 12px #00f5d4;
-      animation: blink 1.4s infinite;
-    }
-
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
-    }
-
-    .mode-indicator {
-      padding: 8px 18px;
-      background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(0, 245, 212, 0.25));
-      border: 1px solid rgba(0, 245, 212, 0.4);
-      border-radius: 999px;
-      color: #00f5d4;
-      font-weight: 700;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      box-shadow: 0 0 24px rgba(0, 245, 212, 0.2);
-    }
-
-    /* Connected Players Roster */
-    .player-roster {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      max-width: 600px;
-    }
-
-    .player-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 5px 12px;
-      background: rgba(12, 15, 28, 0.75);
-      backdrop-filter: blur(8px);
-      border-radius: 999px;
-      border: 1.5px solid rgba(255, 255, 255, 0.2);
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-    }
-
-    .player-chip-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-
-    .hud-right {
       display: flex;
       align-items: center;
       gap: 14px;
-      pointer-events: auto;
+      z-index: 100;
+      backdrop-filter: blur(10px);
     }
 
-    .score-pill {
-      padding: 10px 20px;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 999px;
-      color: #fee440;
-      font-weight: 800;
-      font-size: 15px;
-      letter-spacing: 0.04em;
-    }
-
-    /* Always-visible Join QR Card so new players can scan & join anytime! */
-    .join-qr-card {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 8px 14px 8px 8px;
-      background: rgba(255, 255, 255, 0.09);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 16px;
-      color: #fff;
-      cursor: pointer;
-      transition: transform 0.2s, background 0.2s;
-    }
-
-    .join-qr-card:hover {
-      background: rgba(255, 255, 255, 0.16);
-      transform: translateY(-2px);
-    }
-
-    #mini-qr-container {
-      width: 58px;
-      height: 58px;
-      background: #fff;
-      padding: 4px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #mini-qr-container img, #mini-qr-container canvas {
-      width: 50px !important;
-      height: 50px !important;
-      display: block !important;
-    }
-
-    .reset-btn {
-      padding: 10px 14px;
-      background: rgba(255, 89, 94, 0.15);
-      border: 1px solid rgba(255, 89, 94, 0.4);
-      border-radius: 14px;
-      color: #ff595e;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .reset-btn:hover {
-      background: rgba(255, 89, 94, 0.3);
-    }
-
-    .about-link {
-      padding: 10px 14px;
+    .btn-hud {
       background: rgba(255, 255, 255, 0.08);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      border-radius: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
       color: #fff;
+      padding: 6px 12px;
+      border-radius: 8px;
       font-size: 12px;
       font-weight: 700;
-      text-decoration: none;
-      transition: background 0.2s;
+      cursor: pointer;
+    }
+    .btn-hud:hover {
+      background: #00f5d4;
+      color: #000;
+      border-color: #00f5d4;
     }
 
-    .about-link:hover {
-      background: rgba(255, 255, 255, 0.16);
-    }
-
-    .qr-about-link {
+    /* 우측 상단 미니맵 */
+    .minimap-card {
       position: fixed;
-      bottom: 44px;
-      font-size: 12px;
-      color: #888;
-      text-decoration: none;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      background: rgba(255, 255, 255, 0.8);
-      opacity: 0;
-      transition: opacity 0.3s, color 0.2s;
+      top: 18px;
+      right: 20px;
+      width: 180px;
+      height: 135px;
+      background: rgba(15, 18, 30, 0.85);
+      border: 1px solid rgba(0, 245, 212, 0.4);
+      border-radius: 14px;
+      z-index: 100;
+      overflow: hidden;
+      backdrop-filter: blur(8px);
     }
+    .minimap-card canvas { width: 100%; height: 100%; display: block; }
 
-    #qr-stage:hover .qr-about-link {
-      opacity: 1;
-    }
-
-    .qr-about-link:hover {
-      color: #111;
-    }
-
-    /* Big Center Announcement Banner on Transformation */
-    #unlock-banner {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%) scale(0.8);
-      text-align: center;
-      pointer-events: none;
-      opacity: 0;
-      z-index: 15;
-      transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    #unlock-banner.show {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
-
-    #unlock-banner h1 {
-      font-size: 60px;
-      font-weight: 900;
-      letter-spacing: -0.02em;
-      background: linear-gradient(90deg, #00f5d4, #fee440, #f15bb5);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      filter: drop-shadow(0 10px 30px rgba(0, 245, 212, 0.4));
-    }
-
-    #unlock-banner p {
-      margin-top: 12px;
-      color: rgba(255, 255, 255, 0.85);
-      font-size: 20px;
-      font-weight: 500;
-    }
-
-    .hud-bottom {
-      position: absolute;
-      bottom: 24px;
+    /* 상단 AI 도슨트 오버레이 */
+    #ai-docent-banner {
+      display: none;
+      position: fixed;
+      top: 76px;
       left: 50%;
       transform: translateX(-50%);
-      padding: 10px 22px;
-      background: rgba(10, 12, 22, 0.65);
-      backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(18, 10, 35, 0.95);
+      border: 2px solid #c084fc;
+      box-shadow: 0 0 35px rgba(192, 132, 252, 0.5);
+      border-radius: 18px;
+      padding: 14px 28px;
+      max-width: 820px;
+      width: 88%;
+      color: #fff;
+      z-index: 1000;
+      animation: fadeInDown 0.4s ease;
+    }
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translate(-50%, -20px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
+    }
+
+    /* 하단 감사 로그 스타일 */
+    .audit-btn {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(10, 12, 20, 0.85);
+      border: 1px solid #00f5d4;
+      color: #00f5d4;
+      padding: 9px 16px;
       border-radius: 999px;
-      color: rgba(255, 255, 255, 0.75);
       font-size: 13px;
-      pointer-events: none;
-      white-space: nowrap;
+      font-weight: 800;
+      cursor: pointer;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #audit-modal {
+      display: none;
+      position: fixed;
+      bottom: 74px;
+      left: 20px;
+      width: 480px;
+      max-height: 380px;
+      background: rgba(12, 14, 24, 0.95);
+      border: 1px solid rgba(0, 245, 212, 0.4);
+      border-radius: 16px;
+      padding: 16px;
+      z-index: 1000;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+      overflow-y: auto;
+    }
+
+    /* 모달 팝업 공통 */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.85);
+      z-index: 2000;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(8px);
+    }
+    .modal-box {
+      background: #141726;
+      border: 1.5px solid #00f5d4;
+      border-radius: 24px;
+      padding: 28px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 10px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
 
-  <!-- 1. INITIAL LONELY QR PAGE -->
-  <div id="qr-stage">
-    <div class="qr-box" id="qr-box" title="스마트폰으로 스캔하거나 클릭하여 테스트 컨트롤러 열기">
-      <span class="loading-text" id="qr-loading">QR 생성 중...</span>
-      <div id="qr-container"></div>
+  <!-- ====================================================
+       화면 1: 첫 화면 (로그인 / 회원가입 + 룸 로비)
+       ==================================================== -->
+  <div id="lobby-screen">
+    <div class="lobby-header">
+      <div class="brand-title">
+        <span>🎨 Infinite Graffiti IO</span>
+      </div>
+      <div class="lobby-user-bar">
+        <div id="lobby-auth-status" style="font-size: 13px;">
+          <!-- 로그인 상태 렌더링 -->
+        </div>
+        <button class="btn-create-room" onclick="openCreateRoomModal()">+ 새 캔버스 방 열기</button>
+      </div>
     </div>
-    <a href="about.html" class="qr-about-link">💡 이 페이지는 어떻게 작동하나요? (구조 보기)</a>
-    <div class="sim-hint">스마트폰 카메라로 스캔하세요 (PC에서 바로 테스트하려면 QR 클릭)</div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h2 style="font-size: 18px; color: #fff;">🖼️ 개설된 캔버스 벽 목록</h2>
+      <button class="btn-hud" onclick="loadRoomsList()">🔄 목록 새로고침</button>
+    </div>
+
+    <!-- 룸 카드 목록 -->
+    <div class="rooms-grid" id="rooms-container">
+      <!-- 룸 카드들 동적 주입 -->
+    </div>
   </div>
 
-  <!-- 2. TRANSFORMED MULTI-PLAYER INTERACTIVE STAGE -->
-  <div id="arcade-stage">
-    <div class="hud-top">
-      <div class="hud-left">
-        <div class="badge-group">
-          <div class="live-badge">
-            <span class="live-dot"></span>
-            <span id="player-status">1 PLAYER ONLINE</span>
-          </div>
-          <div class="mode-indicator" id="mode-badge">MODE: NEON CANVAS</div>
-        </div>
-        <div class="player-roster" id="player-roster"></div>
+  <!-- ====================================================
+       화면 2: 인게임 대형 캔버스 화면
+       ==================================================== -->
+  <div id="game-screen">
+    <div class="game-hud-top">
+      <button class="btn-hud" onclick="leaveToLobby()">⬅ 로비로 나가기</button>
+      <div style="font-size: 14px; font-weight: 800; color: #00f5d4; display: flex; align-items: center; gap: 6px;">
+        <span id="ingame-room-badge" style="background:#9333ea; color:#fff; padding:2px 8px; border-radius:6px; font-size:11px;">LOBBY</span>
+        <span id="ingame-room-title">열린 광장 캔버스</span>
       </div>
-
-      <div class="hud-right">
-        <div class="score-pill" id="score-display">SCORE: 0</div>
-        <div class="join-qr-card" id="add-player-card" title="스마트폰으로 스캔하거나 클릭하여 새 플레이어 추가">
-          <div id="mini-qr-container"></div>
-          <div>
-            <div style="font-weight:800; font-size:13px; color:#00f5d4;">+ 멀티플레이 참여</div>
-            <div style="font-size:11px; opacity:0.75; margin-top:2px;">QR 스캔 시 내 커서 생성!</div>
-          </div>
-        </div>
-        <a href="about.html" class="about-link">💡 작동 원리</a>
-        <button class="reset-btn" id="reset-btn">처음으로</button>
-      </div>
+      <button class="btn-hud" onclick="openQrModal()">📷 방 QR 코드</button>
+      <button class="btn-hud" style="color: #00f5d4; border-color: #00f5d4;" onclick="toggleVirtualController()">📱 가상 컨트롤러 (웹 테스트)</button>
     </div>
 
-    <div id="unlock-banner">
-      <h1 id="banner-title">PORTAL UNLOCKED!</h1>
-      <p id="banner-sub">스마트폰으로 각자의 커서를 조종해보세요</p>
+    <!-- 캔버스 본체 -->
+    <canvas id="world-canvas"></canvas>
+
+    <!-- 우측 상단 미니맵 -->
+    <div class="minimap-card">
+      <canvas id="minimap-canvas"></canvas>
     </div>
 
-    <canvas id="stage-canvas"></canvas>
+    <!-- 상단 AI 아트 도슨트 비평 배너 -->
+    <div id="ai-docent-banner">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+        <span style="font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 8px; background: #9333ea; color: #fff;">
+          ✨ AI ART CURATOR
+        </span>
+        <span id="ai-meta-tag" style="font-size: 11px; color: #d8b4fe;">Gemini 실시간 분석</span>
+      </div>
+      <div id="ai-comment-text" style="font-size: 16px; font-weight: 800; color: #faf5ff; text-shadow: 0 0 10px #c084fc; line-height: 1.4;">
+        도슨트 비평 로딩 중...
+      </div>
+    </div>
+  </div>
 
-    <div class="hud-bottom" id="hud-tip">
-      📱 여러 명이 우측 상단 QR을 찍고 들어오면 각자 자기만의 커서와 패들로 동시에 플레이할 수 있습니다!
+  <!-- 방 전용 QR 팝업 모달 -->
+  <div class="modal-overlay" id="qr-modal">
+    <div class="modal-box" style="text-align: center;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h3 style="color:#00f5d4; font-size:16px;">📱 스마트폰 연동 QR</h3>
+        <button onclick="closeQrModal()" style="background:none; border:none; color:#888; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:12px; opacity:0.75; margin-top:4px;">
+        스마트폰으로 스캔하면 <strong id="modal-room-code-label" style="color:#00f5d4;">LOBBY</strong> 방에 즉시 연동됩니다!
+      </p>
+      <div id="modal-qr-container" style="display:flex; justify-content:center; margin:16px 0;"></div>
+      <div style="font-size:11px; color:#aaa; word-break:break-all;" id="modal-qr-url"></div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button onclick="openControllerNewTab()" style="flex:1; padding:10px; border-radius:10px; border:1px solid #00f5d4; background:transparent; color:#00f5d4; font-weight:800; cursor:pointer;">
+          새 탭으로 열기 ↗
+        </button>
+        <button onclick="closeQrModal()" style="flex:1; padding:10px; border-radius:10px; border:none; background:#00f5d4; color:#000; font-weight:800; cursor:pointer;">
+          닫기
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PC 웹 테스트용 가상 스마트폰 컨트롤러 창 -->
+  <div id="virtual-phone-container" style="display: none; position: fixed; right: 24px; bottom: 24px; width: 380px; height: 680px; background: #000; border: 3px solid #00f5d4; border-radius: 36px; box-shadow: 0 20px 60px rgba(0,0,0,0.9); z-index: 1500; overflow: hidden; flex-direction: column;">
+    <div style="background: #121420; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1);">
+      <span style="font-size: 12px; font-weight: 800; color: #fff;">📱 웹 가상 컨트롤러</span>
+      <div style="display: flex; gap: 6px;">
+        <button onclick="openControllerNewTab()" style="background: none; border: none; color: #00f5d4; font-size: 13px; cursor: pointer;">↗ 새탭</button>
+        <button onclick="toggleVirtualController()" style="background: none; border: none; color: #888; font-size: 16px; cursor: pointer;">✕</button>
+      </div>
+    </div>
+    <iframe id="virtual-phone-frame" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+  </div>
+
+  <!-- 새 방 만들기 모달 -->
+  <div class="modal-overlay" id="create-room-modal">
+    <div class="modal-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="color:#00f5d4; font-size:16px;">🎨 새 캔버스 방 만들기</h3>
+        <button onclick="closeCreateRoomModal()" style="background:none; border:none; color:#888; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <div class="form-group">
+        <label>방 코드 (영문/숫자, 고유 ID)</label>
+        <input type="text" id="new-room-code" placeholder="예: NEON-777, MY-STUDIO">
+      </div>
+      <div class="form-group">
+        <label>방 제목 (화면에 표시될 이름)</label>
+        <input type="text" id="new-room-title" placeholder="예: 밤하늘 네온 아트 갤러리">
+      </div>
+      <div class="form-group" style="display:flex; align-items:center; gap:8px;">
+        <input type="checkbox" id="new-room-is-secret" style="width:auto;" onchange="toggleSecretInput(this.checked)">
+        <label for="new-room-is-secret" style="margin:0; color:#c084fc; cursor:pointer;">🔒 비밀방으로 설정 (코드로만 입장)</label>
+      </div>
+      <div class="form-group" id="secret-code-group" style="display:none;">
+        <label>비밀 입장 코드 (숫자/비밀번호)</label>
+        <input type="password" id="new-room-secret-code" placeholder="비밀 코드를 입력하세요">
+      </div>
+      <button class="btn-create-room" style="width:100%; margin-top:8px;" onclick="submitCreateRoom()">캔버스 생성 및 입장</button>
+    </div>
+  </div>
+
+  <!-- 비밀방 입장 코드 확인 모달 -->
+  <div class="modal-overlay" id="secret-entry-modal">
+    <div class="modal-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <h3 style="color:#c084fc; font-size:16px;">🔒 비밀방 입장</h3>
+        <button onclick="closeSecretEntryModal()" style="background:none; border:none; color:#888; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+      <p style="font-size:12px; opacity:0.8; margin-bottom:12px;">
+        <strong id="secret-target-room-name" style="color:#00f5d4;"></strong> 방은 비밀 코드가 필요합니다.
+      </p>
+      <div class="form-group">
+        <label>비밀 입장 코드</label>
+        <input type="password" id="entry-secret-code" placeholder="비밀 코드를 입력하세요">
+      </div>
+      <button class="btn-create-room" style="width:100%;" onclick="submitSecretEntry()">입장하기</button>
+    </div>
+  </div>
+
+  <!-- 로비 전용 로그인 & 회원가입 탭 모달 -->
+  <div class="modal-overlay" id="lobby-login-modal">
+    <div class="modal-box">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="color:#00f5d4; font-size:16px; margin:0;">🎨 아티스트 로그인 / 회원가입</h3>
+      </div>
+
+      <!-- 탭 바 -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:14px; background:rgba(0,0,0,0.4); padding:4px; border-radius:10px;">
+        <button id="lobby-tab-btn-login" onclick="switchLobbyAuthTab('login')" style="padding:8px; border:none; border-radius:8px; background:#00f5d4; color:#000; font-size:12px; font-weight:800; cursor:pointer;">
+          🔑 로그인
+        </button>
+        <button id="lobby-tab-btn-reg" onclick="switchLobbyAuthTab('register')" style="padding:8px; border:none; border-radius:8px; background:transparent; color:#888; font-size:12px; font-weight:800; cursor:pointer;">
+          ✨ 회원가입
+        </button>
+      </div>
+
+      <!-- 1. 로그인 폼 -->
+      <form id="lobby-form-login" onsubmit="handleLobbyLogin(event)" style="display:block;">
+        <div class="form-group">
+          <label>아티스트 아이디</label>
+          <input type="text" id="lobby-login-id" placeholder="아이디 (예: user_a)" required />
+        </div>
+        <div class="form-group">
+          <label>비밀번호</label>
+          <input type="password" id="lobby-login-pw" placeholder="비밀번호" required />
+        </div>
+        <button type="submit" class="btn-create-room" style="width:100%; margin-top:6px;">로그인하기</button>
+
+        <div style="margin-top:14px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.08);">
+          <div style="font-size:11px; opacity:0.6; margin-bottom:6px; text-align:center;">빠른 테스트 계정:</div>
+          <div style="display:flex; gap:6px;">
+            <button type="button" onclick="quickLobbyAuth('user_a')" style="flex:1; padding:7px; border-radius:8px; border:1px solid #00f5d4; background:rgba(0,245,212,0.12); color:#00f5d4; font-size:11px; font-weight:700; cursor:pointer;">
+              👑 user_a (VIP)
+            </button>
+            <button type="button" onclick="quickLobbyAuth('user_b')" style="flex:1; padding:7px; border-radius:8px; border:1px solid #f15bb5; background:rgba(241,91,181,0.12); color:#f15bb5; font-size:11px; font-weight:700; cursor:pointer;">
+              🎨 user_b (일반)
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- 2. 회원가입 폼 -->
+      <form id="lobby-form-reg" onsubmit="handleLobbyRegister(event)" style="display:none;">
+        <div class="form-group">
+          <label>새 아티스트 아이디</label>
+          <input type="text" id="lobby-reg-id" placeholder="영문/숫자 아이디" required />
+        </div>
+        <div class="form-group">
+          <label>닉네임 / 활동명</label>
+          <input type="text" id="lobby-reg-alias" placeholder="화면에 표시될 이름" required />
+        </div>
+        <div class="form-group">
+          <label>비밀번호</label>
+          <input type="password" id="lobby-reg-pw" placeholder="비밀번호" required />
+        </div>
+        <div class="form-group">
+          <label>아티스트 등급 선택</label>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:4px;">
+            <label style="display:flex; align-items:center; gap:6px; padding:6px; border-radius:6px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); font-size:11px; cursor:pointer;">
+              <input type="radio" name="lobby-reg-role" value="vip" checked />
+              <span style="color:#00f5d4; font-weight:bold;">💎 VIP</span>
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; padding:6px; border-radius:6px; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.15); font-size:11px; cursor:pointer;">
+              <input type="radio" name="lobby-reg-role" value="standard" />
+              <span style="color:#aaa;">🎨 일반</span>
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="btn-create-room" style="width:100%; background:#c084fc; border-color:#c084fc;">회원가입 완료 및 입장</button>
+      </form>
+
+      <div id="lobby-auth-err" style="color:#ff595e; font-size:11px; text-align:center; margin-top:8px; min-height:14px;"></div>
     </div>
   </div>
 
   <script>
-    const qrStage = document.getElementById('qr-stage');
-    const arcadeStage = document.getElementById('arcade-stage');
-    const qrContainer = document.getElementById('qr-container');
-    const miniQrContainer = document.getElementById('mini-qr-container');
-    const qrLoading = document.getElementById('qr-loading');
-    const qrBox = document.getElementById('qr-box');
-    const addPlayerCard = document.getElementById('add-player-card');
-    const resetBtn = document.getElementById('reset-btn');
-    const unlockBanner = document.getElementById('unlock-banner');
-    const bannerTitle = document.getElementById('banner-title');
-    const bannerSub = document.getElementById('banner-sub');
-    const modeBadge = document.getElementById('mode-badge');
-    const scoreDisplay = document.getElementById('score-display');
-    const playerStatus = document.getElementById('player-status');
-    const playerRoster = document.getElementById('player-roster');
+    const socket = io();
+    let authToken = localStorage.getItem('qr_auth_token') || '';
+    let currentUser = null;
+    let currentRoom = null;
+    let targetSecretRoom = null;
 
-    let controllerUrl = '';
-    let isUnlocked = false;
-    let currentMode = 'canvas'; // 'canvas' | 'arcade' | 'fireworks'
-    let score = 0;
-
-    const PLAYER_PALETTE = ['#00f5d4', '#f15bb5', '#fee440', '#00bbf9', '#9b5de5', '#ff595e'];
-
-    // Multi-player state map: playerId -> player object
-    const players = new Map();
-
-    // Web Audio Synth for sound effects
-    let audioCtx = null;
-    function initAudio() {
-      if (!audioCtx) {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      }
-    }
-
-    function playSound(type) {
-      try {
-        initAudio();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const now = audioCtx.currentTime;
-
-        if (type === 'unlock') {
-          const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99];
-          notes.forEach((freq, i) => {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(freq, now + i * 0.06);
-            gain.gain.setValueAtTime(0.15, now + i * 0.06);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.35);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start(now + i * 0.06);
-            osc.stop(now + i * 0.06 + 0.35);
-          });
-        } else if (type === 'splat') {
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(180 + Math.random() * 250, now);
-          osc.frequency.exponentialRampToValueAtTime(60, now + 0.18);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start(now);
-          osc.stop(now + 0.18);
-        } else if (type === 'firework') {
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(120, now);
-          osc.frequency.exponentialRampToValueAtTime(640, now + 0.25);
-          gain.gain.setValueAtTime(0.12, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start(now);
-          osc.stop(now + 0.28);
-        } else if (type === 'hit') {
-          const osc = audioCtx.createOscillator();
-          const gain = audioCtx.createGain();
-          osc.type = 'square';
-          osc.frequency.setValueAtTime(440 + Math.random() * 220, now);
-          gain.gain.setValueAtTime(0.1, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
-          osc.connect(gain);
-          gain.connect(audioCtx.destination);
-          osc.start(now);
-          osc.stop(now + 0.09);
-        }
-      } catch (e) {}
-    }
-
-    function updateRosterUI() {
-      const count = players.size;
-      playerStatus.textContent = `${count} PLAYER${count === 1 ? '' : 'S'} ONLINE`;
-      playerRoster.innerHTML = '';
-      players.forEach((p) => {
-        const chip = document.createElement('div');
-        chip.className = 'player-chip';
-        chip.style.borderColor = `${p.color}88`;
-        chip.innerHTML = `<span class="player-chip-dot" style="background:${p.color}; box-shadow: 0 0 8px ${p.color}"></span><span>${p.nickname}</span>`;
-        playerRoster.appendChild(chip);
-      });
-    }
-
-    function getOrCreatePlayer(playerId, nickname, preferredColor) {
-      if (players.has(playerId)) {
-        const existing = players.get(playerId);
-        if (nickname) existing.nickname = nickname;
-        if (preferredColor) existing.color = preferredColor;
-        updateRosterUI();
-        return { player: existing, isNew: false };
-      }
-
-      const playerIndex = players.size;
-      const assignedColor = preferredColor || PLAYER_PALETTE[playerIndex % PLAYER_PALETTE.length];
-      const assignedName = nickname || `P${playerIndex + 1}`;
-
-      // Spread initial spawn positions so cursors don't overlap
-      const angle = (playerIndex * Math.PI * 2) / 6;
-      const spawnRadius = Math.min(canvas.width, canvas.height) * 0.16;
-      const startX = canvas.width / 2 + Math.cos(angle) * spawnRadius;
-      const startY = canvas.height / 2 + Math.sin(angle) * spawnRadius;
-
-      const newPlayer = {
-        id: playerId,
-        nickname: assignedName,
-        color: assignedColor,
-        x: startX,
-        y: startY,
-        vx: 0,
-        vy: 0,
-        radius: 18,
-        paddleX: Math.max(40, Math.min(canvas.width - 200, startX - 80)),
-        paddleWidth: 160,
-        trail: [],
-        score: 0
-      };
-
-      players.set(playerId, newPlayer);
-      updateRosterUI();
-      return { player: newPlayer, isNew: true };
-    }
-
-    function removePlayer(playerId) {
-      if (players.has(playerId)) {
-        players.delete(playerId);
-        updateRosterUI();
-      }
-    }
-
-    // ================= PEERJS (WEBRTC) SETUP =================
-    const roomId = 'qrcon-' + Math.random().toString(36).substring(2, 9);
-    const peer = new Peer(roomId, { debug: 1 });
-
-    peer.on('open', (id) => {
-      qrLoading.style.display = 'none';
-      const basePath = window.location.origin + window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
-      controllerUrl = `${basePath}/controller.html?peer=${encodeURIComponent(id)}`;
-
-      qrContainer.innerHTML = '';
-      new QRCode(qrContainer, {
-        text: controllerUrl,
-        width: 260,
-        height: 260,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-
-      miniQrContainer.innerHTML = '';
-      new QRCode(miniQrContainer, {
-        text: controllerUrl,
-        width: 50,
-        height: 50,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.L
-      });
-    });
-
-    peer.on('connection', (conn) => {
-      let boundPlayerId = null;
-
-      conn.on('data', (msg) => {
-        if (!msg || !msg.event) return;
-        const pid = msg.playerId || conn.peer;
-        boundPlayerId = pid;
-
-        if (msg.event === 'join-controller') {
-          const { player, isNew } = getOrCreatePlayer(pid, msg.nickname, msg.color);
-
-          // Send assigned color & player info back to phone so phone UI matches!
-          if (conn.open) {
-            conn.send({
-              event: 'assigned-profile',
-              nickname: player.nickname,
-              color: player.color
-            });
-          }
-
-          if (!isUnlocked) {
-            unlockStage(player.nickname);
-          } else if (isNew) {
-            showBanner(`${player.nickname} 참전! 🎮`, '각자의 커서를 동시에 조종할 수 있습니다');
-            spawnFirework(player.x, player.y, player.color, 65);
-          }
-        } else if (msg.event === 'switch-mode') {
-          switchMode(msg.mode);
-        } else if (msg.event === 'reset-to-qr') {
-          resetToLonelyQr();
-        } else if (msg.event === 'controller-action') {
-          handleControllerAction(pid, msg);
-        }
-      });
-
-      conn.on('close', () => {
-        if (boundPlayerId) removePlayer(boundPlayerId);
-      });
-    });
-
-    // Clicking the QR on PC opens a simulated phone controller popup (with unique sim ID each click!)
-    function openSimController() {
-      initAudio();
-      if (controllerUrl) {
-        const simId = 'sim-' + Math.random().toString(36).substring(2, 7);
-        window.open(
-          `${controllerUrl}&sim=${simId}`,
-          `PhoneController_${simId}`,
-          `width=410,height=780,left=${80 + players.size * 40},top=${80 + players.size * 30}`
-        );
-      }
-    }
-
-    qrBox.addEventListener('click', openSimController);
-    addPlayerCard.addEventListener('click', openSimController);
-
-    resetBtn.addEventListener('click', () => {
-      resetToLonelyQr();
-    });
-
-    function showBanner(title, sub) {
-      bannerTitle.textContent = title;
-      bannerSub.textContent = sub;
-      unlockBanner.classList.add('show');
-      setTimeout(() => {
-        unlockBanner.classList.remove('show');
-      }, 2200);
-    }
-
-    function unlockStage(nickname) {
-      isUnlocked = true;
-      qrStage.classList.add('unlocked');
-      arcadeStage.classList.add('active');
-      playSound('unlock');
-      showBanner('PORTAL UNLOCKED!', `${nickname}님이 스테이지를 열었습니다!`);
-
-      for (let i = 0; i < 4; i++) {
-        setTimeout(() => {
-          spawnFirework(
-            canvas.width * (0.25 + Math.random() * 0.5),
-            canvas.height * (0.25 + Math.random() * 0.4),
-            PLAYER_PALETTE[i % PLAYER_PALETTE.length],
-            65
-          );
-        }, i * 180);
-      }
-    }
-
-    function resetToLonelyQr() {
-      isUnlocked = false;
-      qrStage.classList.remove('unlocked');
-      arcadeStage.classList.remove('active');
-      splats.length = 0;
-      particles.length = 0;
-      floatingTexts.length = 0;
-    }
-
-    // ================= MULTI-PLAYER CANVAS & ARCADE ENGINE =================
-    const canvas = document.getElementById('stage-canvas');
+    // 캔버스 렌더링
+    const canvas = document.getElementById('world-canvas');
     const ctx = canvas.getContext('2d');
+    const miniCanvas = document.getElementById('minimap-canvas');
+    const miniCtx = miniCanvas.getContext('2d');
 
-    const particles = [];
-    const splats = [];
-    const floatingTexts = [];
-    const ball = { x: 500, y: 400, vx: 6, vy: -6, radius: 11, lastHitColor: '#00f5d4' };
-    let bricks = [];
+    const WORLD_W = 4000;
+    const WORLD_H = 3000;
+    const graffitiCanvas = document.createElement('canvas');
+    graffitiCanvas.width = WORLD_W;
+    graffitiCanvas.height = WORLD_H;
+    const gCtx = graffitiCanvas.getContext('2d');
+
+    function resetGraffitiBg() {
+      gCtx.fillStyle = '#090b12';
+      gCtx.fillRect(0, 0, WORLD_W, WORLD_H);
+      gCtx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      gCtx.lineWidth = 1;
+      for (let x = 0; x < WORLD_W; x += 80) {
+        gCtx.beginPath(); gCtx.moveTo(x, 0); gCtx.lineTo(x, WORLD_H); gCtx.stroke();
+      }
+      for (let y = 0; y < WORLD_H; y += 80) {
+        gCtx.beginPath(); gCtx.moveTo(0, y); gCtx.lineTo(WORLD_W, y); gCtx.stroke();
+      }
+    }
+    resetGraffitiBg();
+
+    let camera = { x: WORLD_W / 2, y: WORLD_H / 2, zoom: 0.9 };
+    let livePlayers = [];
 
     function resize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      initBricks();
+      miniCanvas.width = 180;
+      miniCanvas.height = 135;
     }
     window.addEventListener('resize', resize);
-
-    function initBricks() {
-      bricks = [];
-      const rows = 5;
-      const cols = 9;
-      const pad = 12;
-      const offsetTop = 120;
-      const offsetLeft = 80;
-      const totalW = canvas.width - offsetLeft * 2;
-      const brickW = (totalW - pad * (cols - 1)) / cols;
-      const brickH = 28;
-
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          bricks.push({
-            x: offsetLeft + c * (brickW + pad),
-            y: offsetTop + r * (brickH + pad),
-            w: brickW,
-            h: brickH,
-            color: PLAYER_PALETTE[r % PLAYER_PALETTE.length],
-            alive: true
-          });
-        }
-      }
-      ball.x = canvas.width / 2;
-      ball.y = canvas.height - 140;
-      ball.vx = 6 * (Math.random() > 0.5 ? 1 : -1);
-      ball.vy = -6.5;
-    }
-
     resize();
 
-    function switchMode(mode) {
-      currentMode = mode;
-      if (mode === 'canvas') {
-        modeBadge.textContent = 'MODE: MULTI GRAFFITI CANVAS';
-        showBanner('MULTI GRAFFITI', '모두 각자의 브러시로 동시에 그림을 그리고 물감 폭탄을 던지세요!');
-      } else if (mode === 'arcade') {
-        modeBadge.textContent = 'MODE: CO-OP BRICK BREAKER';
-        initBricks();
-        showBanner('CO-OP ARCADE!', '여러 명이 각자의 패들을 움직여 협동으로 벽돌을 깨세요!');
-      } else if (mode === 'fireworks') {
-        modeBadge.textContent = 'MODE: SKY FIREWORKS SHOW';
-        showBanner('FIREWORKS SHOW', '다 함께 밤하늘에 불꽃을 쏘아올리세요!');
-      }
-      playSound('unlock');
+    // ====================================================
+    // 1. 인증 & 로비 방 목록 제어
+    // ====================================================
+    function switchLobbyAuthTab(tab) {
+      const isLogin = tab === 'login';
+      document.getElementById('lobby-tab-btn-login').style.background = isLogin ? '#00f5d4' : 'transparent';
+      document.getElementById('lobby-tab-btn-login').style.color = isLogin ? '#000' : '#888';
+      document.getElementById('lobby-tab-btn-reg').style.background = !isLogin ? '#c084fc' : 'transparent';
+      document.getElementById('lobby-tab-btn-reg').style.color = !isLogin ? '#000' : '#888';
+      document.getElementById('lobby-form-login').style.display = isLogin ? 'block' : 'none';
+      document.getElementById('lobby-form-reg').style.display = !isLogin ? 'block' : 'none';
+      document.getElementById('lobby-auth-err').innerText = '';
     }
 
-    function spawnFirework(x, y, color, count = 55) {
-      playSound('firework');
-      for (let i = 0; i < count; i++) {
-        const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.2;
-        const speed = 2 + Math.random() * 9;
-        particles.push({
-          x,
-          y,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          color,
-          alpha: 1,
-          size: 3 + Math.random() * 4,
-          gravity: 0.08
+    async function handleLobbyLogin(e) {
+      e.preventDefault();
+      const userId = document.getElementById('lobby-login-id').value.trim();
+      const password = document.getElementById('lobby-login-pw').value;
+      const errBox = document.getElementById('lobby-auth-err');
+      errBox.innerText = '로그인 중...';
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password })
         });
+        const data = await res.json();
+        if (res.ok) {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          errBox.innerText = '';
+          await checkLobbyAuth();
+        } else {
+          errBox.innerText = data.error || '로그인 실패';
+        }
+      } catch (err) {
+        errBox.innerText = '서버 연결 실패';
       }
     }
 
-    function spawnPaintSplat(x, y, color) {
-      playSound('splat');
-      const blobs = [];
-      const mainRadius = 26 + Math.random() * 32;
-      for (let i = 0; i < 14; i++) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = mainRadius * (0.6 + Math.random() * 0.9);
-        blobs.push({
-          dx: Math.cos(ang) * dist,
-          dy: Math.sin(ang) * dist,
-          r: 4 + Math.random() * 14
+    async function handleLobbyRegister(e) {
+      e.preventDefault();
+      const userId = document.getElementById('lobby-reg-id').value.trim();
+      const alias = document.getElementById('lobby-reg-alias').value.trim();
+      const password = document.getElementById('lobby-reg-pw').value;
+      const roleElem = document.querySelector('input[name="lobby-reg-role"]:checked');
+      const role = roleElem ? roleElem.value : 'standard';
+      const errBox = document.getElementById('lobby-auth-err');
+      errBox.innerText = '회원가입 처리 중...';
+
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, alias, password, role })
         });
-      }
-      splats.push({ x, y, r: mainRadius, color, blobs });
-      if (splats.length > 80) splats.shift();
-
-      score += 10;
-      scoreDisplay.textContent = `SCORE: ${score}`;
-    }
-
-    function handleControllerAction(playerId, payload) {
-      const { player } = getOrCreatePlayer(playerId, payload.nickname, payload.color);
-
-      if (!isUnlocked) {
-        unlockStage(player.nickname);
-      }
-
-      if (payload.color) {
-        player.color = payload.color;
-        updateRosterUI();
-      }
-      if (payload.nickname && payload.nickname !== player.nickname) {
-        player.nickname = payload.nickname;
-        updateRosterUI();
-      }
-
-      switch (payload.type) {
-        case 'joystick': {
-          player.vx = payload.dx * 12;
-          player.vy = payload.dy * 12;
-          break;
+        const data = await res.json();
+        if (res.ok) {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          errBox.innerText = '';
+          await checkLobbyAuth();
+        } else {
+          errBox.innerText = data.error || '회원가입 실패';
         }
-        case 'splat': {
-          spawnPaintSplat(player.x, player.y, player.color);
-          spawnFirework(player.x, player.y, player.color, 25);
-          break;
-        }
-        case 'firework': {
-          const fx = player.x + (Math.random() - 0.5) * 180;
-          const fy = Math.max(120, player.y - 100 - Math.random() * 150);
-          spawnFirework(fx, fy, player.color, 70);
-          score += 25;
-          scoreDisplay.textContent = `SCORE: ${score}`;
-          break;
-        }
-        case 'emoji': {
-          floatingTexts.push({
-            text: payload.emoji || '🚀',
-            x: player.x + (Math.random() - 0.5) * 40,
-            y: player.y - 20,
-            vy: -3.5 - Math.random() * 2,
-            alpha: 1,
-            size: 52
-          });
-          playSound('hit');
-          break;
-        }
-        case 'message': {
-          floatingTexts.push({
-            text: `${player.nickname}: ${payload.text}`,
-            x: player.x,
-            y: player.y - 30,
-            vy: -2.2,
-            alpha: 1,
-            size: 34,
-            color: player.color
-          });
-          spawnFirework(player.x, player.y, player.color, 45);
-          break;
-        }
-        case 'clear': {
-          splats.length = 0;
-          players.forEach((p) => (p.trail.length = 0));
-          showBanner('CANVAS CLEARED', `${player.nickname}님이 캔버스를 초기화했습니다`);
-          break;
-        }
+      } catch (err) {
+        errBox.innerText = '서버 연결 실패';
       }
     }
 
-    function animate() {
-      requestAnimationFrame(animate);
-      if (!isUnlocked) return;
+    async function checkLobbyAuth() {
+      const bar = document.getElementById('lobby-auth-status');
+      if (!authToken) {
+        document.getElementById('lobby-login-modal').style.display = 'flex';
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (data.loggedIn) {
+          currentUser = data.user;
+          const isVip = currentUser.role === 'vip';
+          bar.innerHTML = `
+            <span>👤 <strong>${currentUser.alias}</strong> (${isVip ? '<span style="color:#00f5d4;">VIP</span>' : '<span style="color:#f15bb5;">일반</span>'})</span>
+            <button onclick="logoutLobby()" style="background:none; border:none; color:#888; font-size:12px; cursor:pointer; text-decoration:underline; margin-left:8px;">로그아웃</button>
+          `;
+          document.getElementById('lobby-login-modal').style.display = 'none';
+          loadRoomsList();
+        } else {
+          document.getElementById('lobby-login-modal').style.display = 'flex';
+        }
+      } catch (e) {
+        document.getElementById('lobby-login-modal').style.display = 'flex';
+      }
+    }
 
-      ctx.fillStyle = currentMode === 'fireworks' ? 'rgba(7, 8, 16, 0.22)' : 'rgba(10, 12, 24, 0.35)';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    async function quickLobbyAuth(userId) {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password: '1234' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          await checkLobbyAuth();
+        } else {
+          document.getElementById('lobby-auth-err').innerText = data.error;
+        }
+      } catch (e) {
+        document.getElementById('lobby-auth-err').innerText = '로그인 오류';
+      }
+    }
 
-      // 1. Draw Paint Splats (in Canvas mode)
-      if (currentMode === 'canvas') {
-        for (const s of splats) {
+    async function logoutLobby() {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+      } catch (e) {}
+      authToken = '';
+      localStorage.removeItem('qr_auth_token');
+      currentUser = null;
+      document.getElementById('lobby-login-modal').style.display = 'flex';
+    }
+
+    async function loadRoomsList() {
+      try {
+        const res = await fetch('/api/rooms');
+        const rooms = await res.json();
+        const container = document.getElementById('rooms-container');
+        container.innerHTML = '';
+
+        rooms.forEach(r => {
+          const card = document.createElement('div');
+          card.className = `room-card ${r.isSecret ? 'secret' : ''}`;
+          card.onclick = () => onSelectRoom(r);
+          card.innerHTML = `
+            <div>
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <span style="background:${r.isSecret ? '#9333ea' : '#00bbf9'}; color:#fff; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">
+                  ${r.code}
+                </span>
+                <span>${r.isSecret ? '🔒 비밀방' : '🌐 공개방'}</span>
+              </div>
+              <h3 style="font-size:16px; color:#fff; margin-bottom:4px;">${r.title}</h3>
+              <p style="font-size:12px; color:#aaa;">개설자: ${r.owner}</p>
+            </div>
+            <div style="font-size:11px; color:#00f5d4; margin-top:12px; display:flex; justify-content:space-between;">
+              <span>누적 획: ${r.strokeCount}개</span>
+              <span style="font-weight:bold;">입장하기 →</span>
+            </div>
+          `;
+          container.appendChild(card);
+        });
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function onSelectRoom(r) {
+      if (r.isSecret) {
+        targetSecretRoom = r;
+        document.getElementById('secret-target-room-name').innerText = `[${r.code}] ${r.title}`;
+        document.getElementById('entry-secret-code').value = '';
+        document.getElementById('secret-entry-modal').style.display = 'flex';
+      } else {
+        enterGameRoom(r.code, r.title);
+      }
+    }
+
+    async function submitSecretEntry() {
+      const code = document.getElementById('entry-secret-code').value.trim();
+      if (!code) { alert('비밀 코드를 입력하세요.'); return; }
+
+      try {
+        const res = await fetch('/api/rooms/verify-entry', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomCode: targetSecretRoom.code, secretCode: code })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          closeSecretEntryModal();
+          enterGameRoom(targetSecretRoom.code, targetSecretRoom.title);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('입장 검증 오류');
+      }
+    }
+    function closeSecretEntryModal() { document.getElementById('secret-entry-modal').style.display = 'none'; }
+
+    // 새 방 만들기 모달
+    function openCreateRoomModal() { document.getElementById('create-room-modal').style.display = 'flex'; }
+    function closeCreateRoomModal() { document.getElementById('create-room-modal').style.display = 'none'; }
+    function toggleSecretInput(checked) {
+      document.getElementById('secret-code-group').style.display = checked ? 'block' : 'none';
+    }
+
+    async function submitCreateRoom() {
+      const code = document.getElementById('new-room-code').value.trim();
+      const title = document.getElementById('new-room-title').value.trim();
+      const isSecret = document.getElementById('new-room-is-secret').checked;
+      const secretCode = document.getElementById('new-room-secret-code').value.trim();
+
+      if (!code) { alert('방 코드를 입력하세요.'); return; }
+      if (isSecret && !secretCode) { alert('비밀방 코드를 입력하세요.'); return; }
+
+      try {
+        const res = await fetch('/api/rooms/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ code, title, isSecret, secretCode })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          closeCreateRoomModal();
+          enterGameRoom(data.room.code, data.room.title);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('방 생성 오류');
+      }
+    }
+
+    // ====================================================
+    // 2. 인게임 캔버스 전환 & 카메라 플레이어 팔로우
+    // ====================================================
+    function enterGameRoom(roomCode, roomTitle) {
+      currentRoom = roomCode.toUpperCase();
+      document.getElementById('lobby-screen').style.display = 'none';
+      document.getElementById('game-screen').style.display = 'block';
+
+      document.getElementById('ingame-room-badge').innerText = currentRoom;
+      document.getElementById('ingame-room-title').innerText = roomTitle || `${currentRoom} 캔버스`;
+      document.getElementById('modal-room-code-label').innerText = currentRoom;
+
+      resetGraffitiBg();
+      socket.emit('join-screen', currentRoom);
+
+      // URL 해시/파라미터 업데이트
+      window.history.pushState({}, '', `?room=${encodeURIComponent(currentRoom)}`);
+    }
+
+    function leaveToLobby() {
+      if (currentRoom) {
+        // 대형 화면이 로비로 나갈 때 컨트롤러들에게 방 세션 종료 통보
+        socket.emit('screen-leave-room', { room: currentRoom });
+      }
+      document.getElementById('game-screen').style.display = 'none';
+      document.getElementById('lobby-screen').style.display = 'flex';
+      currentRoom = null;
+      loadRoomsList();
+      window.history.pushState({}, '', window.location.pathname);
+    }
+
+    let currentStrokes = [];
+
+    // DB 누적 캔버스 복원
+    socket.on('init-canvas-history', (data) => {
+      currentStrokes = data.strokes || [];
+      redrawAllStrokes();
+      if (data.splats) data.splats.forEach(sp => drawSplat(sp));
+    });
+
+    // 캔버스 전체 지우기 (방장 전용 동작 브로드캐스트 수신)
+    socket.on('canvas-cleared-all', () => {
+      currentStrokes = [];
+      resetGraffitiBg();
+    });
+
+    // 실시간 지우개에 의한 부분 획 삭제 수신
+    socket.on('strokes-erased', (data) => {
+      if (!data.removedIds || data.removedIds.length === 0) return;
+      const idSet = new Set(data.removedIds);
+      currentStrokes = currentStrokes.filter(s => !idSet.has(s.id));
+      redrawAllStrokes();
+    });
+
+    socket.on('live-stroke-drawn', (s) => {
+      currentStrokes.push(s);
+      drawStroke(s);
+    });
+    socket.on('canvas-splat', (sp) => drawSplat(sp));
+
+    function redrawAllStrokes() {
+      resetGraffitiBg();
+      for (let i = 0; i < currentStrokes.length; i++) {
+        drawStroke(currentStrokes[i]);
+      }
+    }
+
+    function drawStroke(s) {
+      gCtx.save();
+      gCtx.strokeStyle = s.color || '#00f5d4';
+      gCtx.lineWidth = s.width || 8;
+      gCtx.lineCap = 'round';
+      gCtx.lineJoin = 'round';
+      gCtx.shadowColor = s.color;
+      gCtx.shadowBlur = 12;
+      gCtx.beginPath();
+      gCtx.moveTo(s.x1, s.y1);
+      gCtx.lineTo(s.x2, s.y2);
+      gCtx.stroke();
+      gCtx.restore();
+    }
+
+    function drawSplat(sp) {
+      gCtx.save();
+      gCtx.fillStyle = sp.color;
+      gCtx.shadowColor = sp.color;
+      gCtx.shadowBlur = 24;
+      gCtx.beginPath();
+      gCtx.arc(sp.x, sp.y, sp.size * 0.6, 0, Math.PI * 2);
+      gCtx.fill();
+      for (let i = 0; i < 12; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = Math.random() * sp.size * 1.5;
+        const r = Math.random() * (sp.size * 0.25) + 3;
+        gCtx.beginPath();
+        gCtx.arc(sp.x + Math.cos(a) * d, sp.y + Math.sin(a) * d, r, 0, Math.PI * 2);
+        gCtx.fill();
+      }
+      gCtx.restore();
+    }
+
+    // 소켓 월드 틱
+    socket.on('world-tick', (data) => {
+      livePlayers = data.players;
+    });
+
+    // 메인 렌더 루프: 카메라가 활성 캐릭터를 부드럽게 추적(Camera Follow)
+    function render() {
+      if (document.getElementById('game-screen').style.display === 'block') {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 내 캐릭터 추적 고정 (플레이어 중 하나를 카메라 중심으로 부드럽게 보간 이동)
+        if (livePlayers.length > 0) {
+          const targetPlayer = livePlayers[livePlayers.length - 1]; // 최근 활성 플레이어
+          const lerp = 0.08;
+          camera.x += (targetPlayer.x - camera.x) * lerp;
+          camera.y += (targetPlayer.y - camera.y) * lerp;
+        }
+
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(camera.zoom, camera.zoom);
+        ctx.translate(-camera.x, -camera.y);
+
+        // 오프스크린 그래피티 캔버스 렌더링
+        ctx.drawImage(graffitiCanvas, 0, 0);
+
+        // 캔버스 테두리
+        ctx.strokeStyle = '#00f5d4';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+
+        // 실시간 캐릭터 렌더링
+        for (const p of livePlayers) {
           ctx.save();
-          ctx.fillStyle = s.color;
-          ctx.shadowColor = s.color;
-          ctx.shadowBlur = 18;
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.translate(p.x, p.y);
 
-          for (const b of s.blobs) {
+          if (p.isErasing) {
+            // 🧽 지우개 모드: 선택한 크기의 점선 원 영역 시각화
+            ctx.save();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([6, 6]);
+            ctx.shadowColor = '#ffffff';
+            ctx.shadowBlur = 14;
             ctx.beginPath();
-            ctx.arc(s.x + b.dx, s.y + b.dy, b.r, 0, Math.PI * 2);
+            ctx.arc(0, 0, p.eraserRadius || 30, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+
+            // 내부 코어
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.beginPath();
+            ctx.arc(0, 0, 14, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.font = '16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🧽', 0, 6);
+          } else {
+            // 일반 네온 발광 오라 (투명 상태면 점선/반투명 아우라로 표시하여 이동 중임을 알림)
+            const isTransparent = p.color === 'transparent';
+            ctx.fillStyle = isTransparent ? 'rgba(255, 255, 255, 0.25)' : p.color;
+            ctx.shadowColor = isTransparent ? '#ffffff' : p.color;
+            ctx.shadowBlur = isTransparent ? 10 : 24;
+            ctx.beginPath();
+            ctx.arc(0, 0, 18, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 캐릭터 내부 코어
+            ctx.fillStyle = isTransparent ? '#888888' : '#ffffff';
+            ctx.beginPath();
+            ctx.arc(0, 0, 10, 0, Math.PI * 2);
             ctx.fill();
           }
+
+          // 닉네임 라벨
+          ctx.font = 'bold 14px Pretendard, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#ffffff';
+          ctx.shadowColor = '#000000';
+          ctx.shadowBlur = 6;
+          ctx.fillText((p.isAi ? '🤖 ' : '') + (p.nickname || 'Artist') + (p.isErasing ? ` (🧽${p.eraserRadius || 30}px)` : ''), 0, -28);
+
+          // AI 봇 또는 플레이어 말풍선 (Gemini 응답 말풍선)
+          if (p.bubbleText) {
+            ctx.save();
+            ctx.font = 'bold 13px Pretendard, sans-serif';
+            const metrics = ctx.measureText(p.bubbleText);
+            const padX = 14;
+            const bubbleW = metrics.width + padX * 2;
+            const bubbleH = 28;
+            const bubbleY = -72;
+
+            ctx.fillStyle = 'rgba(15, 12, 32, 0.94)';
+            ctx.strokeStyle = '#c084fc';
+            ctx.lineWidth = 2;
+            ctx.shadowColor = '#c084fc';
+            ctx.shadowBlur = 14;
+
+            // 말풍선 사각 박스
+            ctx.beginPath();
+            if (ctx.roundRect) {
+              ctx.roundRect(-bubbleW / 2, bubbleY, bubbleW, bubbleH, 10);
+            } else {
+              ctx.rect(-bubbleW / 2, bubbleY, bubbleW, bubbleH);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            // 말풍선 꼬리표
+            ctx.beginPath();
+            ctx.moveTo(-6, bubbleY + bubbleH);
+            ctx.lineTo(0, bubbleY + bubbleH + 7);
+            ctx.lineTo(6, bubbleY + bubbleH);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // 텍스트
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowBlur = 0;
+            ctx.fillText(p.bubbleText, 0, bubbleY + 18);
+            ctx.restore();
+          }
+
           ctx.restore();
         }
+
+        ctx.restore();
+        renderMinimap();
+      }
+      requestAnimationFrame(render);
+    }
+    requestAnimationFrame(render);
+
+    function renderMinimap() {
+      miniCtx.clearRect(0, 0, 180, 135);
+      miniCtx.drawImage(graffitiCanvas, 0, 0, 180, 135);
+      miniCtx.strokeStyle = 'rgba(0, 245, 212, 0.4)';
+      miniCtx.strokeRect(0, 0, 180, 135);
+
+      for (const p of livePlayers) {
+        const mx = (p.x / WORLD_W) * 180;
+        const my = (p.y / WORLD_H) * 135;
+        miniCtx.fillStyle = p.color;
+        miniCtx.shadowColor = p.color;
+        miniCtx.shadowBlur = 6;
+        miniCtx.beginPath();
+        miniCtx.arc(mx, my, 4, 0, Math.PI * 2);
+        miniCtx.fill();
       }
 
-      // 2. Update each player's independent cursor & trail
-      players.forEach((p) => {
-        p.x = Math.max(28, Math.min(canvas.width - 28, p.x + p.vx));
-        p.y = Math.max(28, Math.min(canvas.height - 28, p.y + p.vy));
-        p.paddleX = Math.max(20, Math.min(canvas.width - p.paddleWidth - 20, p.paddleX + p.vx * 1.4));
+      const vx = ((camera.x - (canvas.width / 2 / camera.zoom)) / WORLD_W) * 180;
+      const vy = ((camera.y - (canvas.height / 2 / camera.zoom)) / WORLD_H) * 135;
+      const vw = ((canvas.width / camera.zoom) / WORLD_W) * 180;
+      const vh = ((canvas.height / camera.zoom) / WORLD_H) * 135;
+      miniCtx.strokeStyle = '#ffffff';
+      miniCtx.lineWidth = 1.5;
+      miniCtx.strokeRect(vx, vy, vw, vh);
+    }
 
-        if (Math.hypot(p.vx, p.vy) > 0.5) {
-          p.trail.push({ x: p.x, y: p.y, color: p.color, life: 1 });
-          if (p.trail.length > 65) p.trail.shift();
-
-          if (currentMode === 'fireworks' && Math.random() < 0.28) {
-            particles.push({
-              x: p.x,
-              y: p.y,
-              vx: (Math.random() - 0.5) * 4,
-              vy: (Math.random() - 0.5) * 4,
-              color: p.color,
-              alpha: 1,
-              size: 3,
-              gravity: 0.04
-            });
-          }
-        }
-
-        // Draw Player Trail
-        for (let i = 0; i < p.trail.length; i++) {
-          const t = p.trail[i];
-          t.life -= 0.018;
-          if (t.life <= 0) continue;
-          ctx.save();
-          ctx.fillStyle = t.color;
-          ctx.globalAlpha = t.life * 0.7;
-          ctx.beginPath();
-          ctx.arc(t.x, t.y, 10 * t.life, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-
-        // Draw Player Cursor + Nickname Tag (in Canvas & Fireworks mode)
-        if (currentMode !== 'arcade') {
-          ctx.save();
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = 3;
-          ctx.fillStyle = p.color;
-          ctx.shadowColor = p.color;
-          ctx.shadowBlur = 24;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-
-          // Player Nickname Tag above cursor
-          ctx.font = '800 13px Pretendard, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#ffffff';
-          ctx.shadowBlur = 8;
-          ctx.fillText(p.nickname, p.x, p.y - p.radius - 10);
-          ctx.restore();
-        }
-      });
-
-      // 3. Co-op Arcade Brick Breaker (Each player has their own paddle!)
-      if (currentMode === 'arcade') {
-        const paddleY = canvas.height - 78;
-        const paddleH = 18;
-
-        players.forEach((p) => {
-          ctx.save();
-          ctx.fillStyle = p.color;
-          ctx.shadowColor = p.color;
-          ctx.shadowBlur = 20;
-          ctx.beginPath();
-          ctx.roundRect(p.paddleX, paddleY, p.paddleWidth, paddleH, 9);
-          ctx.fill();
-
-          ctx.font = '800 12px Pretendard, sans-serif';
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(p.nickname, p.paddleX + p.paddleWidth / 2, paddleY + 34);
-          ctx.restore();
-
-          // Check ball collision with this player's paddle
-          if (
-            ball.vy > 0 &&
-            ball.y + ball.radius >= paddleY &&
-            ball.y - ball.radius <= paddleY + paddleH &&
-            ball.x >= p.paddleX &&
-            ball.x <= p.paddleX + p.paddleWidth
-          ) {
-            const hitOffset = (ball.x - (p.paddleX + p.paddleWidth / 2)) / (p.paddleWidth / 2);
-            ball.vx = hitOffset * 8.5;
-            ball.vy = -Math.abs(ball.vy);
-            ball.lastHitColor = p.color;
-            playSound('hit');
-            spawnFirework(ball.x, ball.y, p.color, 18);
-          }
+    // ====================================================
+    // 3. QR 모달 & 가상 컨트롤러
+    // ====================================================
+    function openQrModal() {
+      fetch(`/api/qr?room=${encodeURIComponent(currentRoom)}`)
+        .then(r => r.json())
+        .then(data => {
+          const container = document.getElementById('modal-qr-container');
+          container.innerHTML = '';
+          new QRCode(container, {
+            text: data.controllerUrl,
+            width: 220,
+            height: 220,
+            colorDark: '#000000',
+            colorLight: '#ffffff'
+          });
+          document.getElementById('modal-qr-url').innerText = data.controllerUrl;
+          document.getElementById('qr-modal').style.display = 'flex';
         });
+    }
+    function closeQrModal() { document.getElementById('qr-modal').style.display = 'none'; }
 
-        ball.x += ball.vx;
-        ball.y += ball.vy;
-
-        if (ball.x - ball.radius < 0 || ball.x + ball.radius > canvas.width) {
-          ball.vx *= -1;
-          playSound('hit');
-        }
-        if (ball.y - ball.radius < 0) {
-          ball.vy *= -1;
-          playSound('hit');
-        }
-
-        if (ball.y > canvas.height + 30) {
-          const firstPlayer = players.values().next().value;
-          ball.x = firstPlayer ? firstPlayer.paddleX + firstPlayer.paddleWidth / 2 : canvas.width / 2;
-          ball.y = canvas.height - 120;
-          ball.vy = -6.5;
-        }
-
-        let aliveCount = 0;
-        for (const b of bricks) {
-          if (!b.alive) continue;
-          aliveCount++;
-
-          if (
-            ball.x + ball.radius > b.x &&
-            ball.x - ball.radius < b.x + b.w &&
-            ball.y + ball.radius > b.y &&
-            ball.y - ball.radius < b.y + b.h
-          ) {
-            b.alive = false;
-            ball.vy *= -1;
-            score += 50;
-            scoreDisplay.textContent = `SCORE: ${score}`;
-            spawnFirework(b.x + b.w / 2, b.y + b.h / 2, b.color, 28);
-          }
-
-          ctx.save();
-          ctx.fillStyle = b.color;
-          ctx.shadowColor = b.color;
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.roundRect(b.x, b.y, b.w, b.h, 6);
-          ctx.fill();
-          ctx.restore();
-        }
-
-        if (aliveCount === 0) {
-          initBricks();
-          showBanner('STAGE CLEAR! 🎉', '협동 보너스 +500점 획득!');
-          score += 500;
-          scoreDisplay.textContent = `SCORE: ${score}`;
-        }
-
-        ctx.save();
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = ball.lastHitColor;
-        ctx.shadowBlur = 18;
-        ctx.beginPath();
-        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // 4. Firework Particles
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const p = particles[i];
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += p.gravity;
-        p.vx *= 0.98;
-        p.alpha -= 0.016;
-
-        if (p.alpha <= 0) {
-          particles.splice(i, 1);
-          continue;
-        }
-
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.fillStyle = p.color;
-        ctx.shadowColor = p.color;
-        ctx.shadowBlur = 12;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
-      }
-
-      // 5. Floating Emojis & Messages
-      for (let i = floatingTexts.length - 1; i >= 0; i--) {
-        const ft = floatingTexts[i];
-        ft.y += ft.vy;
-        ft.alpha -= 0.008;
-        if (ft.alpha <= 0) {
-          floatingTexts.splice(i, 1);
-          continue;
-        }
-        ctx.save();
-        ctx.globalAlpha = ft.alpha;
-        ctx.font = `800 ${ft.size}px Pretendard, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.fillStyle = ft.color || '#ffffff';
-        ctx.shadowColor = ft.color || '#00f5d4';
-        ctx.shadowBlur = 16;
-        ctx.fillText(ft.text, ft.x, ft.y);
-        ctx.restore();
+    function toggleVirtualController() {
+      const container = document.getElementById('virtual-phone-container');
+      const frame = document.getElementById('virtual-phone-frame');
+      const isHidden = container.style.display === 'none' || !container.style.display;
+      if (isHidden) {
+        frame.src = `controller.html?room=${encodeURIComponent(currentRoom)}`;
+        container.style.display = 'flex';
+      } else {
+        container.style.display = 'none';
+        frame.src = '';
       }
     }
 
-    animate();
+    function openControllerNewTab() {
+      window.open(`/controller.html?room=${encodeURIComponent(currentRoom)}`, '_blank', 'width=420,height=750');
+    }
+
+    // ====================================================
+    // 4. AI 큐레이터 실시간 비평 배너
+    // ====================================================
+    const docentBanner = document.getElementById('ai-docent-banner');
+    const commentText = document.getElementById('ai-comment-text');
+    const metaTag = document.getElementById('ai-meta-tag');
+    let bannerTimer = null;
+
+    socket.on('ai-docent-broadcast', (data) => {
+      commentText.innerText = data.comment;
+      metaTag.innerText = `분석 아티스트: ${data.author || 'AI'}`;
+      docentBanner.style.display = 'block';
+
+      if (bannerTimer) clearTimeout(bannerTimer);
+      bannerTimer = setTimeout(() => docentBanner.style.display = 'none', 8000);
+    });
+
+    // 시작 시 인증 및 로비 확인
+    checkLobbyAuth();
+
+    // 만약 URL 파라미터에 이미 ?room=... 이 지정되어 들어온 경우 바로 입장 지원
+    const initialRoomParam = params.get('room');
+    if (initialRoomParam && authToken) {
+      enterGameRoom(initialRoomParam, initialRoomParam);
+    }
   </script>
 </body>
 </html>

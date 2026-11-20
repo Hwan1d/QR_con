@@ -3,9 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Arcade Controller</title>
-  <!-- PeerJS for Serverless WebRTC P2P communication -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <title>Graffiti.io Controller</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-adapter.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -17,280 +18,407 @@
 
     body {
       min-height: 100dvh;
-      background: radial-gradient(circle at top, #1d223c 0%, #090b14 100%);
+      background: radial-gradient(circle at top, #141726 0%, #080a10 100%);
       color: #ffffff;
-      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: 16px 16px 22px;
-      overflow-x: hidden;
+      padding: 12px;
+      overflow: hidden;
     }
 
-    .header {
+    /* 상단 상태 바 */
+    .top-bar {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .room-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 8px;
+      font-size: 12px;
     }
 
-    .status-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      background: rgba(0, 245, 212, 0.14);
-      border: 1px solid rgba(0, 245, 212, 0.4);
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 700;
+    .room-badge {
+      background: #9333ea;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 800;
+    }
+
+    .user-tag {
+      font-weight: 800;
       color: #00f5d4;
     }
 
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #00f5d4;
-      box-shadow: 0 0 10px #00f5d4;
-    }
-
-    .nickname-box {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      border-radius: 999px;
-      padding: 4px 12px;
-    }
-
-    .nickname-box span {
-      font-size: 11px;
-      opacity: 0.6;
-    }
-
-    .nickname-input {
-      width: 78px;
-      background: transparent;
-      border: none;
-      color: #fff;
-      font-weight: 800;
-      font-size: 13px;
-      outline: none;
-      text-align: center;
-    }
-
-    /* Mode Selector Tabs */
-    .mode-tabs {
+    /* 듀얼 모드 전환 탭 (조이스틱 vs 터치 캔버스) */
+    .mode-tab-bar {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 8px;
-      margin-top: 12px;
-      background: rgba(255, 255, 255, 0.05);
-      padding: 5px;
-      border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: 10px;
     }
 
-    .mode-tab {
-      padding: 10px 6px;
+    .mode-tab-btn {
+      padding: 8px;
       border: none;
-      border-radius: 12px;
+      border-radius: 8px;
       background: transparent;
-      color: rgba(255, 255, 255, 0.65);
-      font-size: 13px;
-      font-weight: 700;
+      color: #888;
+      font-size: 12px;
+      font-weight: 800;
       cursor: pointer;
-      transition: all 0.2s;
     }
 
-    .mode-tab.active {
-      background: linear-gradient(135deg, #00f5d4, #00bbf9);
+    .mode-tab-btn.active {
+      background: #00f5d4;
       color: #070810;
-      box-shadow: 0 4px 16px rgba(0, 245, 212, 0.35);
+      box-shadow: 0 0 10px rgba(0, 245, 212, 0.4);
     }
 
-    /* Color Palette Bar */
+    /* 색상 팔레트 */
     .palette {
       display: flex;
-      justify-content: space-between;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 0;
       align-items: center;
-      margin-top: 12px;
-      padding: 10px 14px;
-      background: rgba(255, 255, 255, 0.04);
-      border-radius: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
     }
 
     .swatch {
-      width: 34px;
-      height: 34px;
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
-      border: 2.5px solid transparent;
       cursor: pointer;
-      transition: transform 0.2s, border-color 0.2s;
+      border: 2px solid transparent;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
     }
-
     .swatch.active {
-      transform: scale(1.22);
-      border-color: #ffffff;
-      box-shadow: 0 0 14px currentColor;
+      transform: scale(1.2);
+      border-color: #fff;
+      box-shadow: 0 0 10px currentColor;
     }
 
-    /* Virtual Joystick Zone */
-    .joystick-section {
+    .swatch-transparent {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px dashed #aaa;
+      color: #ff595e;
+      font-weight: bold;
+    }
+    .swatch-transparent.active {
+      border-color: #ff595e;
+      box-shadow: 0 0 10px #ff595e;
+    }
+
+    .swatch-eraser {
+      background: rgba(255, 255, 255, 0.2);
+      border: 1.5px solid #ffffff;
+      color: #ffffff;
+      font-size: 13px;
+    }
+    .swatch-eraser.active {
+      border-color: #00f5d4;
+      box-shadow: 0 0 12px #ffffff;
+      transform: scale(1.2);
+    }
+
+    .eraser-size-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 8px;
+      margin-top: 4px;
+    }
+    .btn-eraser-size {
+      flex: 1;
+      padding: 5px 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #ccc;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-eraser-size.active {
+      background: #ffffff;
+      color: #000000;
+      border-color: #ffffff;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+    }
+
+    .ai-action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .btn-ai-action {
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(192, 132, 252, 0.4);
+      background: rgba(147, 51, 234, 0.15);
+      color: #e9d5ff;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-ai-action:active { transform: scale(0.98); }
+
+    /* 중앙 조이스틱 / 캔버스 영역 */
+    .center-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      margin: 8px 0;
+      position: relative;
+    }
+
+    #joystick-view {
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      margin: 14px 0;
+      width: 100%;
     }
 
-    .joystick-base {
+    .joystick-zone {
       position: relative;
-      width: 185px;
-      height: 185px;
+      width: 220px;
+      height: 220px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 70%);
-      border: 2px solid rgba(0, 245, 212, 0.3);
-      box-shadow: inset 0 0 30px rgba(0, 245, 212, 0.12), 0 10px 30px rgba(0,0,0,0.4);
-      touch-action: none;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 70%);
+      border: 2px dashed rgba(255, 255, 255, 0.15);
       display: flex;
       align-items: center;
       justify-content: center;
+      touch-action: none;
     }
 
     .joystick-stick {
-      position: absolute;
-      width: 74px;
-      height: 74px;
+      width: 72px;
+      height: 72px;
       border-radius: 50%;
-      background: radial-gradient(circle at 30% 30%, #ffffff, #00f5d4);
-      box-shadow: 0 8px 25px rgba(0, 245, 212, 0.55);
+      background: radial-gradient(circle, #00f5d4, #00bbf9);
+      box-shadow: 0 0 20px rgba(0, 245, 212, 0.6);
+      position: absolute;
       pointer-events: none;
-      transition: transform 0.05s linear;
     }
 
-    .joy-hint {
-      margin-top: 10px;
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.55);
+    #canvas-view {
+      display: none;
+      width: 100%;
+      height: 100%;
+      min-height: 240px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 2px solid rgba(0, 245, 212, 0.35);
+      border-radius: 16px;
+      position: relative;
+      touch-action: none;
     }
 
-    /* Arcade Action Buttons */
-    .action-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    #touch-draw-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
     }
 
-    .action-btn {
-      padding: 15px 12px;
-      border-radius: 18px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      font-size: 15px;
-      font-weight: 800;
+    /* 하단 유저 도구 & 방장 관리자 바 */
+    .bottom-tools {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .btn-clear-mine {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.08);
       color: #fff;
+      font-size: 12px;
+      font-weight: 700;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      transition: transform 0.1s;
+      gap: 6px;
+    }
+    .btn-clear-mine:active { transform: scale(0.98); }
+
+    /* 방장(Owner) 전용 패널 */
+    .owner-panel {
+      display: none;
+      background: rgba(147, 51, 234, 0.15);
+      border: 1px solid rgba(192, 132, 252, 0.4);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 11px;
     }
 
-    .action-btn:active {
-      transform: scale(0.94);
-    }
-
-    .btn-splat {
-      background: linear-gradient(135deg, #f15bb5, #9b5de5);
-      box-shadow: 0 8px 24px rgba(241, 91, 181, 0.35);
-    }
-
-    .btn-firework {
-      background: linear-gradient(135deg, #ff9f1c, #f72585);
-      box-shadow: 0 8px 24px rgba(247, 37, 133, 0.35);
-    }
-
-    /* Emoji Bar */
-    .emoji-bar {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-      margin-top: 12px;
-    }
-
-    .emoji-btn {
-      flex: 1;
-      padding: 10px 0;
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.07);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      font-size: 22px;
+    .btn-owner {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 11px;
+      font-weight: 800;
       cursor: pointer;
-      transition: transform 0.1s, background 0.2s;
     }
 
-    .emoji-btn:active {
-      transform: scale(0.88);
-      background: rgba(255, 255, 255, 0.2);
-    }
-
-    /* Live Message Shooter */
-    .msg-row {
+    /* 로그인 모달 */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.88);
       display: flex;
-      gap: 8px;
-      margin-top: 12px;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+      backdrop-filter: blur(8px);
     }
 
-    .msg-input {
-      flex: 1;
-      padding: 12px 14px;
-      border-radius: 14px;
-      border: 1px solid rgba(255, 255, 255, 0.18);
-      background: rgba(255, 255, 255, 0.06);
+    .modal-card {
+      background: #141726;
+      border: 1.5px solid #00f5d4;
+      border-radius: 20px;
+      padding: 22px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 0 40px rgba(0, 245, 212, 0.25);
+    }
+
+    .auth-tab-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 16px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px;
+      border-radius: 10px;
+    }
+    .auth-tab-btn {
+      padding: 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #888;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .auth-tab-btn.active {
+      background: #00f5d4;
+      color: #0c0e18;
+      box-shadow: 0 0 10px rgba(0, 245, 212, 0.4);
+    }
+    .auth-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    .auth-input-group label {
+      font-size: 11px;
+      color: #aaa;
+      font-weight: 700;
+    }
+    .auth-input {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.5);
       color: #fff;
-      font-size: 14px;
+      font-size: 13px;
       outline: none;
     }
-
-    .msg-send {
-      padding: 0 18px;
-      border-radius: 14px;
+    .auth-input:focus {
+      border-color: #00f5d4;
+      box-shadow: 0 0 8px rgba(0, 245, 212, 0.3);
+    }
+    .btn-auth-submit {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
       border: none;
       background: #00f5d4;
       color: #070810;
+      font-size: 13px;
       font-weight: 800;
-      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(0, 245, 212, 0.4);
+      margin-top: 6px;
+    }
+    .btn-auth-submit:active { transform: scale(0.98); }
+    .role-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .role-option-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 11px;
       cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <div>
-    <div class="header">
-      <div class="status-chip">
-        <span class="dot" id="status-dot"></span>
-        <span id="conn-label">CONNECTING...</span>
+  <!-- 상단 바 -->
+  <div class="top-bar">
+    <div class="room-row">
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span class="room-badge" id="room-code-tag">LOBBY</span>
+        <button onclick="promptSwitchRoom()" style="background:none; border:none; color:#00f5d4; font-size:11px; text-decoration:underline; cursor:pointer;">방 변경</button>
       </div>
-      <div class="nickname-box">
-        <span>내 이름:</span>
-        <input type="text" id="nickname-input" class="nickname-input" maxlength="10" />
+      <div style="display:flex; align-items:center; gap:6px;">
+        <span class="user-tag" id="user-alias-label">미로그인</span>
+        <button id="btn-auth-open" onclick="openAuthModal()" style="background:rgba(0,245,212,0.15); border:1px solid #00f5d4; border-radius:6px; color:#00f5d4; font-size:10px; font-weight:700; padding:3px 7px; cursor:pointer;">로그인</button>
+        <button id="btn-logout" onclick="logoutAuth()" style="display:none; background:rgba(255,89,94,0.15); border:1px solid #ff595e; border-radius:6px; color:#ff595e; font-size:10px; font-weight:700; padding:3px 7px; cursor:pointer;">로그아웃</button>
       </div>
     </div>
 
-    <!-- Mode Switcher -->
-    <div class="mode-tabs">
-      <button class="mode-tab active" data-mode="canvas">🎨 그래피티</button>
-      <button class="mode-tab" data-mode="arcade">🕹️ 협동 벽돌깨기</button>
-      <button class="mode-tab" data-mode="fireworks">🎆 불꽃놀이</button>
+    <!-- 듀얼 모드 전환 탭 -->
+    <div class="mode-tab-bar">
+      <button class="mode-tab-btn active" id="tab-joystick" onclick="switchMode('joystick')">🕹️ 조이스틱</button>
+      <button class="mode-tab-btn" id="tab-canvas" onclick="switchMode('canvas')">🖌️ 터치 패드</button>
     </div>
 
-    <!-- Neon Color Swatches -->
-    <div class="palette" id="palette">
+    <!-- 팔레트 (도구 및 색상 선택) -->
+    <div class="palette">
+      <span style="font-size:11px; opacity:0.6; margin-right:4px;">도구:</span>
+      <div class="swatch swatch-eraser" id="swatch-eraser" data-color="eraser" title="지우개 (내가 그린 선 부분 지우기)">🧽</div>
+      <div class="swatch swatch-transparent" id="swatch-none" data-color="transparent" title="선 끄기 (이동만)">🚫</div>
       <div class="swatch active" style="background:#00f5d4; color:#00f5d4" data-color="#00f5d4"></div>
       <div class="swatch" style="background:#f15bb5; color:#f15bb5" data-color="#f15bb5"></div>
       <div class="swatch" style="background:#fee440; color:#fee440" data-color="#fee440"></div>
@@ -298,258 +426,753 @@
       <div class="swatch" style="background:#9b5de5; color:#9b5de5" data-color="#9b5de5"></div>
       <div class="swatch" style="background:#ff595e; color:#ff595e" data-color="#ff595e"></div>
     </div>
+
+    <!-- 지우개 선택 시 나타나는 크기 조절 바 -->
+    <div class="eraser-size-bar" id="eraser-size-bar">
+      <span style="font-size:11px; color:#aaa;">크기:</span>
+      <button class="btn-eraser-size" id="btn-size-15" onclick="setEraserSize(15)">소 (15px)</button>
+      <button class="btn-eraser-size active" id="btn-size-30" onclick="setEraserSize(30)">중 (30px)</button>
+      <button class="btn-eraser-size" id="btn-size-60" onclick="setEraserSize(60)">대 (60px)</button>
+    </div>
   </div>
 
-  <!-- Analog Joystick -->
-  <div class="joystick-section">
-    <div class="joystick-base" id="joy-base">
-      <div class="joystick-stick" id="joy-stick"></div>
+  <!-- 중앙 메인 뷰 -->
+  <div class="center-view">
+    <!-- 뷰 1: 가변 감도 조이스틱 -->
+    <div id="joystick-view">
+      <div style="font-size:11px; opacity:0.6; margin-bottom:8px; text-align:center;">
+        🕹️ 당긴 만큼 비례하여 이동합니다 (놓으면 정지)
+      </div>
+      <div class="joystick-zone" id="joy-zone">
+        <div class="joystick-stick" id="joy-stick"></div>
+      </div>
     </div>
-    <div class="joy-hint">드래그하여 내 전용 커서/패들을 조종하세요</div>
+
+    <!-- 뷰 2: 내 화면 중심 터치 드로잉 패드 -->
+    <div id="canvas-view">
+      <div style="position:absolute; top:8px; left:50%; transform:translateX(-50%); font-size:11px; color:#aaa; pointer-events:none;">
+        🖌️ 내 캐릭터 위치를 중심으로 그려집니다
+      </div>
+      <canvas id="touch-draw-canvas"></canvas>
+    </div>
   </div>
 
-  <!-- Action Triggers -->
-  <div>
-    <div class="action-grid">
-      <button class="action-btn btn-splat" id="btn-splat">💥 내 위치에 스플랫</button>
-      <button class="action-btn btn-firework" id="btn-firework">🎆 대형 불꽃 발사</button>
+  <!-- 하단 도구: 일반 유저 지우기 & AI 인터랙션 & 방장 전용 관리 패널 -->
+  <div class="bottom-tools">
+
+    <!-- 1. 지우기: 내 모든 선 한 번에 지우기 (소유권 RLS) -->
+    <button class="btn-clear-mine" onclick="clearMyDrawings()">
+      <span>🧹 내가 그린 모든 선 한 번에 지우기</span>
+    </button>
+
+    <!-- 2. 실제 Gemini 3.5 Flash 연동 AI 봇 액션 -->
+    <div class="ai-action-row">
+      <button class="btn-ai-action" onclick="askAiCritic()">
+        <span>💬 AI 봇의 한마디</span>
+      </button>
+      <button class="btn-ai-action" onclick="promptAiDrawing()">
+        <span>🎨 AI에게 그림 요청</span>
+      </button>
     </div>
 
-    <div class="emoji-bar">
-      <button class="emoji-btn" data-emoji="🔥">🔥</button>
-      <button class="emoji-btn" data-emoji="🚀">🚀</button>
-      <button class="emoji-btn" data-emoji="⚡">⚡</button>
-      <button class="emoji-btn" data-emoji="🎉">🎉</button>
-      <button class="emoji-btn" data-emoji="👾">👾</button>
-      <button class="emoji-btn" id="btn-clear" title="캔버스 지우기">🧹</button>
+    <!-- 2. 방장(Owner) / 최고관리자 전용 관리 패널: AI 봇 생성/삭제 & 캔버스 전체 지우기 -->
+    <div class="owner-panel" id="owner-panel" style="display:none;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <span style="color:#c084fc; font-weight:800;" id="owner-title-tag">👑 관리자 전용</span>
+        <span id="ai-bot-count" style="color:#aaa;">AI 봇: 0/2</span>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn-owner" style="background:#9333ea; color:#fff; flex:1;" onclick="spawnAiBot()">+ AI 봇 소환</button>
+        <button class="btn-owner" style="background:rgba(255,255,255,0.15); color:#fff; flex:1;" onclick="removeAiBot()">- AI 봇 삭제</button>
+        <button class="btn-owner" style="background:#ff595e; color:#fff; flex:1.2;" onclick="clearAllCanvas()">⚠️ 전체 지우기</button>
+      </div>
+    </div>
+      </div>
     </div>
 
-    <form class="msg-row" id="msg-form">
-      <input
-        type="text"
-        class="msg-input"
-        id="msg-input"
-        placeholder="내 커서 위로 띄울 한 줄 메시지..."
-        maxlength="24"
-      />
-      <button type="submit" class="msg-send">발사</button>
-    </form>
+    <div id="bottom-feedback" style="font-size:11px; text-align:center; color:#00f5d4; min-height:14px;"></div>
+  </div>
+
+  <!-- 인증 모달: 로그인 & 회원가입 탭 -->
+  <div class="modal-overlay" id="auth-modal" style="display:none;">
+    <div class="modal-card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="color:#00f5d4; font-size:16px; margin:0;">🎨 아티스트 인증 센터</h3>
+        <button onclick="closeAuthModal()" style="background:none; border:none; color:#888; font-size:18px; cursor:pointer;">✕</button>
+      </div>
+
+      <!-- 탭 바 -->
+      <div class="auth-tab-bar">
+        <button class="auth-tab-btn active" id="btn-tab-login" onclick="switchAuthTab('login')">🔑 로그인</button>
+        <button class="auth-tab-btn" id="btn-tab-register" onclick="switchAuthTab('register')">✨ 회원가입</button>
+      </div>
+
+      <!-- 1. 로그인 폼 -->
+      <form id="form-login" onsubmit="handleLoginSubmit(event)" style="display:block;">
+        <div class="auth-input-group">
+          <label>아티스트 아이디</label>
+          <input type="text" id="login-userId" class="auth-input" placeholder="아이디 입력 (예: user_a)" required />
+        </div>
+        <div class="auth-input-group">
+          <label>비밀번호</label>
+          <input type="password" id="login-password" class="auth-input" placeholder="비밀번호 입력" required />
+        </div>
+        <button type="submit" class="btn-auth-submit">입장하기 (로그인)</button>
+
+        <div style="margin-top:14px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.08);">
+          <div style="font-size:11px; opacity:0.6; margin-bottom:8px; text-align:center;">빠른 테스트 계정으로 로그인:</div>
+          <div style="display:flex; gap:6px;">
+            <button type="button" onclick="quickAuth('user_a')" style="flex:1; padding:7px; border-radius:8px; border:1px solid #00f5d4; background:rgba(0,245,212,0.12); color:#00f5d4; font-size:11px; font-weight:700; cursor:pointer;">
+              👑 user_a (VIP/방장)
+            </button>
+            <button type="button" onclick="quickAuth('user_b')" style="flex:1; padding:7px; border-radius:8px; border:1px solid #f15bb5; background:rgba(241,91,181,0.12); color:#f15bb5; font-size:11px; font-weight:700; cursor:pointer;">
+              🎨 user_b (일반)
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- 2. 회원가입 폼 -->
+      <form id="form-register" onsubmit="handleRegisterSubmit(event)" style="display:none;">
+        <div class="auth-input-group">
+          <label>새 아티스트 아이디</label>
+          <input type="text" id="reg-userId" class="auth-input" placeholder="영문/숫자 아이디 (예: neo_artist)" required />
+        </div>
+        <div class="auth-input-group">
+          <label>닉네임 / 활동명</label>
+          <input type="text" id="reg-alias" class="auth-input" placeholder="화면에 표시될 이름 (예: 사이버뱅크시)" required />
+        </div>
+        <div class="auth-input-group">
+          <label>비밀번호</label>
+          <input type="password" id="reg-password" class="auth-input" placeholder="비밀번호 입력" required />
+        </div>
+        <div class="auth-input-group">
+          <label>아티스트 등급 선택</label>
+          <div class="role-options">
+            <label class="role-option-label">
+              <input type="radio" name="reg-role" value="vip" checked />
+              <span style="color:#00f5d4; font-weight:700;">💎 VIP 아티스트</span>
+            </label>
+            <label class="role-option-label">
+              <input type="radio" name="reg-role" value="standard" />
+              <span style="color:#aaa;">🎨 일반 아티스트</span>
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="btn-auth-submit" style="background:#c084fc; box-shadow:0 0 15px rgba(192,132,252,0.4);">
+          회원가입 완료 및 입장
+        </button>
+      </form>
+
+      <div id="auth-error-msg" style="color:#ff595e; font-size:11px; text-align:center; margin-top:10px; min-height:14px;"></div>
+    </div>
+  </div>
+
+  <!-- 화면 퇴장 시 자동 컨트롤러 연결 끊김 안내 오버레이 -->
+  <div class="modal-overlay" id="session-ended-overlay" style="display:none; z-index:9999; text-align:center;">
+    <div class="modal-card" style="border-color:#ff595e; box-shadow:0 0 40px rgba(255,89,94,0.35);">
+      <div style="font-size:38px; margin-bottom:10px;">🚪</div>
+      <h3 style="color:#ff595e; font-size:17px; margin-bottom:8px;">컨트롤러 연결이 해제되었습니다</h3>
+      <p style="font-size:12px; opacity:0.85; line-height:1.5; margin-bottom:14px;" id="session-ended-reason">
+        대형 화면이 로비로 이동하였거나 방이 종료되었습니다.
+      </p>
+      <div style="font-size:11px; color:#aaa; line-height:1.4; margin-bottom:18px; background:rgba(0,0,0,0.3); padding:10px; border-radius:10px;">
+        다른 방으로 이동하셨다면, 해당 대형 화면에 새로 표시된 <strong>새로운 방의 QR 코드</strong>를 스캔하여 컨트롤러를 다시 연결해 주세요.
+      </div>
+      <button onclick="window.location.reload()" style="width:100%; padding:12px; border-radius:10px; border:none; background:#ff595e; color:#fff; font-weight:800; cursor:pointer;">
+        🔄 새로고침 / 다시 연결
+      </button>
+    </div>
   </div>
 
   <script>
+    const socket = io();
     const params = new URLSearchParams(window.location.search);
-    const targetPeerId = params.get('peer');
-    const simId = params.get('sim');
-    const connLabel = document.getElementById('conn-label');
-    const statusDot = document.getElementById('status-dot');
-    const nicknameInput = document.getElementById('nickname-input');
-    const stick = document.getElementById('joy-stick');
+    let currentRoom = (params.get('room') || 'LOBBY').toUpperCase();
 
-    // Persistent device Player ID so camera preview / page reload doesn't spawn ghost players
-    let playerId = simId;
-    if (!playerId) {
-      playerId = localStorage.getItem('qrcon_player_id');
-      if (!playerId) {
-        playerId = 'p-' + Math.random().toString(36).substring(2, 10);
-        localStorage.setItem('qrcon_player_id', playerId);
-      }
+    let myColor = '#00f5d4';
+    let myNickname = 'Artist';
+    let currentAngle = 0;
+    let currentIntensity = 0;
+    let authToken = localStorage.getItem('qr_auth_token') || '';
+    let currentAuthUser = null;
+    let isRoomOwner = false;
+
+    document.getElementById('room-code-tag').innerText = currentRoom;
+
+    function joinGameRoom() {
+      socket.emit('join-controller', {
+        room: currentRoom,
+        nickname: myNickname,
+        color: myColor,
+        userId: currentAuthUser ? currentAuthUser.userId : 'guest'
+      });
+      checkRoomOwnerStatus();
+    }
+    socket.on('connect', joinGameRoom);
+
+    // 듀얼 모드 전환
+    function switchMode(mode) {
+      document.getElementById('tab-joystick').classList.toggle('active', mode === 'joystick');
+      document.getElementById('tab-canvas').classList.toggle('active', mode === 'canvas');
+      document.getElementById('joystick-view').style.display = mode === 'joystick' ? 'flex' : 'none';
+      document.getElementById('canvas-view').style.display = mode === 'canvas' ? 'block' : 'none';
+      if (mode === 'canvas') resizeTouchCanvas();
     }
 
-    let nickname = localStorage.getItem('qrcon_nickname_' + (simId || 'default'));
-    if (!nickname) {
-      nickname = 'PLAYER ' + Math.floor(10 + Math.random() * 89);
-      localStorage.setItem('qrcon_nickname_' + (simId || 'default'), nickname);
-    }
-    nicknameInput.value = nickname;
+    // ==========================================
+    // 조이스틱 조작 (감도 비례 & 놓으면 정지)
+    // ==========================================
+    const joyZone = document.getElementById('joy-zone');
+    const joyStick = document.getElementById('joy-stick');
+    let isTouching = false;
+    const center = { x: 110, y: 110 };
+    const maxRadius = 75;
 
-    let currentColor = null; // Assigned by server based on player order unless manually changed
-    let peerConn = null;
-    let hasConnected = false;
+    function handleJoyMove(clientX, clientY) {
+      const rect = joyZone.getBoundingClientRect();
+      const x = clientX - rect.left - center.x;
+      const y = clientY - rect.top - center.y;
+      const dist = Math.hypot(x, y);
 
-    function vibrate(ms = 25) {
-      if (navigator.vibrate) navigator.vibrate(ms);
-    }
+      currentAngle = Math.atan2(y, x);
+      currentIntensity = Math.min(dist / maxRadius, 1.0);
 
-    function applyColorTheme(color) {
-      currentColor = color;
-      stick.style.background = `radial-gradient(circle at 30% 30%, #ffffff, ${color})`;
-      stick.style.boxShadow = `0 8px 25px ${color}88`;
-      statusDot.style.background = color;
-      statusDot.style.boxShadow = `0 0 10px ${color}`;
-      document.querySelectorAll('.swatch').forEach((s) => {
-        s.classList.toggle('active', s.dataset.color.toLowerCase() === color.toLowerCase());
+      const clampedDist = Math.min(dist, maxRadius);
+      const stickX = Math.cos(currentAngle) * clampedDist;
+      const stickY = Math.sin(currentAngle) * clampedDist;
+
+      joyStick.style.transform = `translate(${stickX}px, ${stickY}px)`;
+
+      socket.emit('player-control', {
+        angle: currentAngle,
+        intensity: currentIntensity,
+        color: myColor,
+        nickname: myNickname
       });
     }
 
-    function sendToScreen(event, payload = {}) {
-      if (peerConn && peerConn.open) {
-        peerConn.send({
-          event,
-          playerId,
-          nickname: nicknameInput.value.trim() || nickname,
-          color: currentColor,
-          ...payload
-        });
+    function stopJoy() {
+      currentIntensity = 0;
+      joyStick.style.transform = `translate(0px, 0px)`;
+      socket.emit('player-control', { intensity: 0 });
+    }
+
+    joyZone.addEventListener('pointerdown', (e) => {
+      isTouching = true;
+      joyZone.setPointerCapture(e.pointerId);
+      handleJoyMove(e.clientX, e.clientY);
+    });
+    joyZone.addEventListener('pointermove', (e) => {
+      if (isTouching) handleJoyMove(e.clientX, e.clientY);
+    });
+    joyZone.addEventListener('pointerup', () => {
+      isTouching = false;
+      stopJoy();
+    });
+
+    // ==========================================
+    // 내 캐릭터 위치 중심 터치 드로잉 패드
+    // ==========================================
+    const tCanvas = document.getElementById('touch-draw-canvas');
+    const tCtx = tCanvas.getContext('2d');
+    let isDrawingPad = false;
+    let lastPadPoint = null;
+
+    function resizeTouchCanvas() {
+      const box = document.getElementById('canvas-view');
+      tCanvas.width = box.clientWidth;
+      tCanvas.height = box.clientHeight;
+    }
+    window.addEventListener('resize', resizeTouchCanvas);
+
+    let eraserRadius = 30;
+
+    function setEraserSize(size) {
+      eraserRadius = size;
+      document.querySelectorAll('.btn-eraser-size').forEach(b => {
+        b.classList.toggle('active', parseInt(b.innerText.match(/\d+/)?.[0]) === size);
+      });
+      if (myColor === 'eraser') {
+        socket.emit('player-control', { isErasing: true, eraserRadius });
+        showFeedback(`🧽 지우개 크기: ${size}px`);
       }
     }
 
-    function startConnection() {
-      if (hasConnected || !targetPeerId) return;
-      hasConnected = true;
+    tCanvas.addEventListener('pointerdown', (e) => {
+      if (myColor === 'transparent') {
+        alert('현재 "선 끄기(🚫)" 상태입니다. 상단에서 색상이나 지우개를 선택해주세요!');
+        return;
+      }
+      isDrawingPad = true;
+      tCanvas.setPointerCapture(e.pointerId);
+      const rect = tCanvas.getBoundingClientRect();
+      lastPadPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    });
 
-      const peer = new Peer();
-      peer.on('open', () => {
-        peerConn = peer.connect(targetPeerId, { reliable: true });
-        peerConn.on('open', () => {
-          connLabel.textContent = 'ONLINE';
-          vibrate([40, 60, 80]);
-          sendToScreen('join-controller');
+    tCanvas.addEventListener('pointermove', (e) => {
+      if (!isDrawingPad || !lastPadPoint || myColor === 'transparent') return;
+      const rect = tCanvas.getBoundingClientRect();
+      const cur = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const scale = 2.0;
+
+      if (myColor === 'eraser') {
+        // 터치 패드 지우개 궤적 시각 피드백
+        tCtx.save();
+        tCtx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        tCtx.lineWidth = Math.max(6, eraserRadius / 2);
+        tCtx.lineCap = 'round';
+        tCtx.beginPath();
+        tCtx.moveTo(lastPadPoint.x, lastPadPoint.y);
+        tCtx.lineTo(cur.x, cur.y);
+        tCtx.stroke();
+        tCtx.restore();
+
+        socket.emit('erase-stroke-at', {
+          dx: (cur.x - tCanvas.width / 2) * scale,
+          dy: (cur.y - tCanvas.height / 2) * scale,
+          radius: eraserRadius
         });
+      } else {
+        tCtx.strokeStyle = myColor;
+        tCtx.lineWidth = 4;
+        tCtx.lineCap = 'round';
+        tCtx.beginPath();
+        tCtx.moveTo(lastPadPoint.x, lastPadPoint.y);
+        tCtx.lineTo(cur.x, cur.y);
+        tCtx.stroke();
 
-        peerConn.on('data', (msg) => {
-          if (msg && msg.event === 'assigned-profile') {
-            if (msg.color) applyColorTheme(msg.color);
-            if (msg.nickname) {
-              nickname = msg.nickname;
-              nicknameInput.value = msg.nickname;
-            }
-          }
-        });
-      });
-    }
+        const stroke = {
+          dx1: (lastPadPoint.x - tCanvas.width / 2) * scale,
+          dy1: (lastPadPoint.y - tCanvas.height / 2) * scale,
+          dx2: (cur.x - tCanvas.width / 2) * scale,
+          dy2: (cur.y - tCanvas.height / 2) * scale,
+          color: myColor,
+          width: 8
+        };
+        socket.emit('direct-draw-stroke', stroke);
+      }
+      lastPadPoint = cur;
+    });
 
-    // Prevent iOS/Android camera QR preview (background pre-render) from creating a ghost connection
-    if (document.visibilityState === 'visible') {
-      startConnection();
-    } else {
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') {
-          startConnection();
+    tCanvas.addEventListener('pointerup', () => {
+      isDrawingPad = false;
+      lastPadPoint = null;
+    });
+
+    // 팔레트
+    document.querySelectorAll('.swatch').forEach(s => {
+      s.addEventListener('click', () => {
+        document.querySelectorAll('.swatch').forEach(x => x.classList.remove('active'));
+        s.classList.add('active');
+        myColor = s.dataset.color;
+
+        const sizeBar = document.getElementById('eraser-size-bar');
+        if (myColor === 'eraser') {
+          if (sizeBar) sizeBar.style.display = 'flex';
+          joyStick.style.background = 'radial-gradient(circle, #ffffff, #888888)';
+          joyStick.innerHTML = '<span style="font-size:24px; display:flex; align-items:center; justify-content:center; height:100%;">🧽</span>';
+          socket.emit('player-control', { color: 'eraser', isErasing: true, eraserRadius });
+          showFeedback('🧽 지우개 모드: 지나간 위치의 내 그림만 실시간으로 지웁니다.');
+        } else if (myColor === 'transparent') {
+          if (sizeBar) sizeBar.style.display = 'none';
+          joyStick.innerHTML = '';
+          joyStick.style.background = 'radial-gradient(circle, #555, #222)';
+          socket.emit('player-control', { color: 'transparent', isDrawing: false, isErasing: false });
+          showFeedback('🚫 선 끄기 모드: 선을 긋지 않고 이동만 합니다.');
+        } else {
+          if (sizeBar) sizeBar.style.display = 'none';
+          joyStick.innerHTML = '';
+          joyStick.style.background = `radial-gradient(circle, ${myColor}, #ffffff)`;
+          socket.emit('player-control', { color: myColor, isDrawing: true, isErasing: false });
         }
       });
+    });
+
+    function promptSwitchRoom() {
+      const target = prompt('입장할 룸 코드를 입력하세요:', currentRoom);
+      if (target && target.trim()) {
+        currentRoom = target.trim().toUpperCase();
+        document.getElementById('room-code-tag').innerText = currentRoom;
+        window.history.replaceState({}, '', `?room=${encodeURIComponent(currentRoom)}`);
+        joinGameRoom();
+      }
     }
 
-    nicknameInput.addEventListener('change', () => {
-      const val = nicknameInput.value.trim();
-      if (val) {
-        nickname = val;
-        localStorage.setItem('qrcon_nickname_' + (simId || 'default'), nickname);
-        sendToScreen('controller-action', { type: 'profile', nickname });
+    socket.on('canvas-cleared-all', () => {
+      if (tCtx && tCanvas) {
+        tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
       }
     });
 
-    // Mode Tabs
-    document.querySelectorAll('.mode-tab').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        document.querySelectorAll('.mode-tab').forEach((t) => t.classList.remove('active'));
-        tab.classList.add('active');
-        vibrate(30);
-        sendToScreen('switch-mode', { mode: tab.dataset.mode });
-      });
-    });
-
-    // Color Palette
-    document.querySelectorAll('.swatch').forEach((sw) => {
-      sw.addEventListener('click', () => {
-        applyColorTheme(sw.dataset.color);
-        vibrate(20);
-        sendToScreen('controller-action', { type: 'color', color: currentColor });
-      });
-    });
-
-    // Analog Joystick Logic
-    const base = document.getElementById('joy-base');
-    let dragging = false;
-    const maxDist = 56;
-
-    function handleMove(clientX, clientY) {
-      const rect = base.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      let dx = clientX - cx;
-      let dy = clientY - cy;
-      const dist = Math.hypot(dx, dy);
-
-      if (dist > maxDist) {
-        dx = (dx / dist) * maxDist;
-        dy = (dy / dist) * maxDist;
-      }
-
-      stick.style.transform = `translate(${dx}px, ${dy}px)`;
-
-      sendToScreen('controller-action', {
-        type: 'joystick',
-        dx: +(dx / maxDist).toFixed(2),
-        dy: +(dy / maxDist).toFixed(2)
-      });
-    }
-
-    function resetStick() {
-      dragging = false;
-      stick.style.transform = 'translate(0px, 0px)';
-      sendToScreen('controller-action', {
-        type: 'joystick',
-        dx: 0,
-        dy: 0
-      });
-    }
-
-    base.addEventListener('pointerdown', (e) => {
-      dragging = true;
-      base.setPointerCapture(e.pointerId);
-      handleMove(e.clientX, e.clientY);
-    });
-
-    base.addEventListener('pointermove', (e) => {
-      if (!dragging) return;
-      handleMove(e.clientX, e.clientY);
-    });
-
-    base.addEventListener('pointerup', resetStick);
-    base.addEventListener('pointercancel', resetStick);
-
-    // Splat & Firework Buttons
-    document.getElementById('btn-splat').addEventListener('click', () => {
-      vibrate(40);
-      sendToScreen('controller-action', { type: 'splat' });
-    });
-
-    document.getElementById('btn-firework').addEventListener('click', () => {
-      vibrate([30, 40, 50]);
-      sendToScreen('controller-action', { type: 'firework' });
-    });
-
-    // Emoji Buttons
-    document.querySelectorAll('.emoji-btn[data-emoji]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        vibrate(25);
-        sendToScreen('controller-action', {
-          type: 'emoji',
-          emoji: btn.dataset.emoji
+    // ==========================================
+    // [Gemini 3.5 Flash] AI 봇 비평 & 드로잉 액션
+    // ==========================================
+    async function askAiCritic() {
+      showFeedback('🤖 Gemini AI 봇이 캔버스를 분석하고 있습니다...');
+      try {
+        const res = await fetch('/api/ai/ask-critic', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ roomCode: currentRoom })
         });
-      });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback(`💬 [${data.nickname}]: "${data.comment}"`);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('AI 비평 호출 오류');
+      }
+    }
+
+    async function promptAiDrawing() {
+      const promptText = prompt('🎨 AI 봇에게 어떤 그림을 그려달라고 할까요?\n(예: 네온 하트, 고양이 얼굴, 별, 사이버 트럭)', '네온 하트');
+      if (!promptText || !promptText.trim()) return;
+
+      showFeedback(`🤖 Gemini가 "${promptText.trim()}" 벡터를 설계하고 있습니다...`);
+      try {
+        const res = await fetch('/api/ai/request-drawing', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ roomCode: currentRoom, prompt: promptText.trim() })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback(`✨ ${data.message}`);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('AI 드로잉 요청 오류');
+      }
+    }
+
+    // ==========================================
+    // 소유권(RLS) 지우기 & 방장 관리 권한
+    // ==========================================
+    // 1. 내가 그린 그림만 지우기 (소유권 RLS)
+    async function clearMyDrawings() {
+      if (!authToken) { alert('로그인이 필요합니다.'); return; }
+      try {
+        const res = await fetch('/api/canvas/clear-mine', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ roomCode: currentRoom })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback(`🧹 ${data.message}`);
+          tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('삭제 통신 오류');
+      }
+    }
+
+    // 2. 방장 전용: 캔버스 전체 지우기
+    async function clearAllCanvas() {
+      if (!confirm('⚠️ 정말로 이 방의 캔버스 전체 그림을 모두 지우시겠습니까? (방장 전용)')) return;
+      try {
+        const res = await fetch('/api/canvas/clear-all', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ roomCode: currentRoom })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback('✨ 방장 권한으로 캔버스 전체를 초기화했습니다.');
+          tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('오류 발생');
+      }
+    }
+
+    // 3. 방장 전용: AI 봇 소환
+    async function spawnAiBot() {
+      try {
+        const res = await fetch('/api/ai/spawn-bot', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ roomCode: currentRoom })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback(`🤖 ${data.message}`);
+          updateBotCountBadge();
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('소환 오류');
+      }
+    }
+
+    // 4. 방장 전용: AI 봇 삭제
+    async function removeAiBot() {
+      try {
+        const res = await fetch('/api/ai/remove-bot', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ roomCode: currentRoom })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          showFeedback(`👋 ${data.message}`);
+          updateBotCountBadge();
+        } else {
+          alert(data.error);
+        }
+      } catch (e) {
+        alert('삭제 오류');
+      }
+    }
+
+    async function updateBotCountBadge() {
+      try {
+        const res = await fetch(`/api/ai/bot-status?roomCode=${encodeURIComponent(currentRoom)}`);
+        const data = await res.json();
+        document.getElementById('ai-bot-count').innerText = `AI 봇: ${data.botCount}/2`;
+      } catch (e) {}
+    }
+
+    async function checkRoomOwnerStatus() {
+      try {
+        const res = await fetch(`/api/rooms/${encodeURIComponent(currentRoom)}/my-role`, {
+          headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+        });
+        const data = await res.json();
+        const canManage = !!data.canManage;
+        document.getElementById('owner-panel').style.display = canManage ? 'block' : 'none';
+        if (canManage) {
+          updateBotCountBadge();
+          const titleTag = document.getElementById('owner-title-tag');
+          if (titleTag) {
+            titleTag.innerText = data.isAdmin ? '👑 시스템 관리자(Admin)' : `👑 방 주인 (${data.roomOwner})`;
+          }
+        }
+      } catch (e) {
+        document.getElementById('owner-panel').style.display = 'none';
+      }
+    }
+
+    // 대형 화면이 로비로 나가거나 방이 종료되었을 때 컨트롤러 자동 차단
+    socket.on('room-session-ended', (data) => {
+      stopJoy();
+      socket.disconnect();
+      document.getElementById('session-ended-reason').innerText = data.reason || '대형 화면이 로비로 이동하였거나 방이 종료되었습니다.';
+      document.getElementById('session-ended-overlay').style.display = 'flex';
     });
 
-    // Clear Canvas
-    document.getElementById('btn-clear').addEventListener('click', () => {
-      vibrate(35);
-      sendToScreen('controller-action', { type: 'clear' });
-    });
+    function showFeedback(text) {
+      const el = document.getElementById('bottom-feedback');
+      el.innerText = text;
+      setTimeout(() => el.innerText = '', 4000);
+    }
 
-    // Live Message Form
-    const msgForm = document.getElementById('msg-form');
-    const msgInput = document.getElementById('msg-input');
-    msgForm.addEventListener('submit', (e) => {
+    // ==========================================
+    // 인증(Auth) 및 세션 관리
+    // ==========================================
+    function openAuthModal() {
+      document.getElementById('auth-modal').style.display = 'flex';
+      setAuthError('');
+    }
+    function closeAuthModal() {
+      if (authToken) {
+        document.getElementById('auth-modal').style.display = 'none';
+      }
+    }
+
+    function switchAuthTab(tab) {
+      const isLogin = tab === 'login';
+      document.getElementById('btn-tab-login').classList.toggle('active', isLogin);
+      document.getElementById('btn-tab-register').classList.toggle('active', !isLogin);
+      document.getElementById('form-login').style.display = isLogin ? 'block' : 'none';
+      document.getElementById('form-register').style.display = !isLogin ? 'block' : 'none';
+      setAuthError('');
+    }
+
+    function setAuthError(msg) {
+      document.getElementById('auth-error-msg').innerText = msg;
+    }
+
+    async function handleLoginSubmit(e) {
       e.preventDefault();
-      const text = msgInput.value.trim();
-      if (!text) return;
-      vibrate(40);
-      sendToScreen('controller-action', {
-        type: 'message',
-        text
-      });
-      msgInput.value = '';
-    });
+      const userId = document.getElementById('login-userId').value.trim();
+      const password = document.getElementById('login-password').value;
+      if (!userId || !password) return setAuthError('아이디와 비밀번호를 입력해주세요.');
+
+      setAuthError('로그인 확인 중...');
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          await checkAuthSession();
+          joinGameRoom();
+          showFeedback(`✨ 환영합니다, ${data.user.alias}님!`);
+        } else {
+          setAuthError(data.error || '로그인에 실패했습니다.');
+        }
+      } catch (err) {
+        setAuthError('서버 연결 실패');
+      }
+    }
+
+    async function handleRegisterSubmit(e) {
+      e.preventDefault();
+      const userId = document.getElementById('reg-userId').value.trim();
+      const alias = document.getElementById('reg-alias').value.trim();
+      const password = document.getElementById('reg-password').value;
+      const roleElem = document.querySelector('input[name="reg-role"]:checked');
+      const role = roleElem ? roleElem.value : 'standard';
+
+      if (!userId || !alias || !password) return setAuthError('모든 항목을 입력해주세요.');
+
+      setAuthError('회원가입 처리 중...');
+      try {
+        const res = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, alias, password, role })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          await checkAuthSession();
+          joinGameRoom();
+          showFeedback(`🎉 회원가입 완료! ${data.user.alias} 아티스트로 입장했습니다.`);
+        } else {
+          setAuthError(data.error || '회원가입 실패');
+        }
+      } catch (err) {
+        setAuthError('서버 연결 실패');
+      }
+    }
+
+    async function logoutAuth() {
+      if (!confirm('정말 로그아웃하시겠습니까?')) return;
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+      } catch (e) {}
+      authToken = '';
+      currentAuthUser = null;
+      localStorage.removeItem('qr_auth_token');
+      document.getElementById('user-alias-label').innerText = '미로그인';
+      document.getElementById('btn-auth-open').style.display = 'inline-block';
+      document.getElementById('btn-logout').style.display = 'none';
+      document.getElementById('owner-panel').style.display = 'none';
+      openAuthModal();
+      showFeedback('로그아웃되었습니다.');
+    }
+
+    async function checkAuthSession() {
+      if (!authToken) {
+        document.getElementById('user-alias-label').innerText = '미로그인';
+        document.getElementById('btn-auth-open').style.display = 'inline-block';
+        document.getElementById('btn-logout').style.display = 'none';
+        openAuthModal();
+        return;
+      }
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (data.loggedIn) {
+          currentAuthUser = data.user;
+          const isVip = currentAuthUser.role === 'vip';
+          document.getElementById('user-alias-label').innerText = `${currentAuthUser.alias} (${isVip ? 'VIP' : '일반'})`;
+          document.getElementById('user-alias-label').style.color = isVip ? '#00f5d4' : '#f15bb5';
+          document.getElementById('btn-auth-open').style.display = 'none';
+          document.getElementById('btn-logout').style.display = 'inline-block';
+          loadPreferences();
+          document.getElementById('auth-modal').style.display = 'none';
+          checkRoomOwnerStatus();
+        } else {
+          logoutAuth();
+        }
+      } catch (e) {
+        openAuthModal();
+      }
+    }
+
+    async function quickAuth(userId) {
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password: '1234' })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          await checkAuthSession();
+          joinGameRoom();
+        } else {
+          setAuthError(data.error);
+        }
+      } catch (e) {
+        setAuthError('로그인 오류');
+      }
+    }
+
+    async function loadPreferences() {
+      if (!authToken) return;
+      try {
+        const res = await fetch('/api/preferences', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (res.ok) {
+          const pref = await res.json();
+          if (pref.nickname) myNickname = pref.nickname;
+          if (pref.color && pref.color !== 'transparent') {
+            myColor = pref.color;
+            document.querySelectorAll('.swatch').forEach(s => {
+              s.classList.toggle('active', s.dataset.color === pref.color);
+            });
+            joyStick.style.background = `radial-gradient(circle, ${myColor}, #ffffff)`;
+          }
+          socket.emit('player-control', { color: myColor, nickname: myNickname });
+        }
+      } catch (e) {}
+    }
+
+    setTimeout(checkAuthSession, 300);
   </script>
 </body>
 </html>

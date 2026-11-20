@@ -906,53 +906,6 @@ app.post('/api/ai/request-drawing', async (req, res) => {
   if (!room) return res.status(404).json({ error: '방을 찾을 수 없습니다.' });
   if (!prompt || !prompt.trim()) return res.status(400).json({ error: '그릴 주제를 입력해주세요.' });
 
-  // AI 아티스트 봇 소환/준비
-  const botNames = ['Cyber_Picasso', 'Pixel_Banksy', 'Neon_VanGogh', 'Digital_Warhol', 'Retro_Basquiat'];
-  const botColors = ['#c084fc', '#00f5d4', '#f15bb5', '#fee440', '#00bbf9'];
-  const chosenName = botNames[Math.floor(Math.random() * botNames.length)];
-  const chosenColor = botColors[Math.floor(Math.random() * botColors.length)];
-
-  if (!roomAiBots[code]) roomAiBots[code] = [];
-
-  // 스폰 위치: 유저의 현재 위치 근처에 자연스럽게 등장
-  const playersInRoom = Object.values(roomPlayers[code] || {});
-  let spawnX = 2000, spawnY = 1500;
-  if (playersInRoom.length > 0) {
-    const refP = playersInRoom[0];
-    const offsetAngle = Math.random() * Math.PI * 2;
-    spawnX = Math.max(400, Math.min(WORLD_WIDTH - 400, Math.round(refP.x + Math.cos(offsetAngle) * 350)));
-    spawnY = Math.max(400, Math.min(WORLD_HEIGHT - 400, Math.round(refP.y + Math.sin(offsetAngle) * 350)));
-  }
-
-  let bot = roomAiBots[code].find(b => b.isAi);
-  if (!bot) {
-    bot = {
-      id: `ai-artist-${Date.now()}`,
-      room: code,
-      nickname: chosenName,
-      color: chosenColor,
-      x: spawnX,
-      y: spawnY,
-      angle: 0,
-      speed: 6.8,
-      isDrawing: true,
-      isAi: true,
-      isTemporary: true, // 그림 완성 후 자동 퇴장 플래그
-      turnTimer: 0,
-      prevX: spawnX,
-      prevY: spawnY
-    };
-    roomAiBots[code].push(bot);
-  } else {
-    bot.x = spawnX;
-    bot.y = spawnY;
-    bot.prevX = spawnX;
-    bot.prevY = spawnY;
-    bot.isTemporary = true;
-    bot.color = chosenColor;
-    bot.nickname = chosenName;
-  }
-
   const geminiPrompt = `주제: "${prompt.trim()}".
 이 주제의 형태를 2D 캔버스에 그리기 위해 연결되는 2D 상대 벡터 좌표 리스트를 순수한 JSON 배열 포맷으로 작성하세요.
 반드시 다른 텍스트 없이 [ {"dx": 숫자, "dy": 숫자}, ... ] 형식으로만 응답해야 합니다.
@@ -979,17 +932,70 @@ app.post('/api/ai/request-drawing', async (req, res) => {
     points = getProceduralSketch(prompt);
   }
 
+  // AI 아티스트 봇 소환/준비
+  const botNames = ['Cyber_Picasso', 'Pixel_Banksy', 'Neon_VanGogh', 'Digital_Warhol', 'Retro_Basquiat'];
+  const botColors = ['#c084fc', '#00f5d4', '#f15bb5', '#fee440', '#00bbf9'];
+  const chosenName = botNames[Math.floor(Math.random() * botNames.length)];
+  const chosenColor = botColors[Math.floor(Math.random() * botColors.length)];
+
+  if (!roomAiBots[code]) roomAiBots[code] = [];
+
+  // 스폰 위치: 유저의 현재 위치 근처에 자연스럽게 등장
+  const playersInRoom = Object.values(roomPlayers[code] || {});
+  let spawnX = 2000, spawnY = 1500;
+  if (playersInRoom.length > 0) {
+    const refP = playersInRoom[0];
+    const offsetAngle = Math.random() * Math.PI * 2;
+    spawnX = Math.max(400, Math.min(WORLD_WIDTH - 400, Math.round(refP.x + Math.cos(offsetAngle) * 350)));
+    spawnY = Math.max(400, Math.min(WORLD_HEIGHT - 400, Math.round(refP.y + Math.sin(offsetAngle) * 350)));
+  }
+
   // 봇에게 해당 드로잉 목표 지점들 부여 (캔버스 가시성을 위해 적절히 2.2배 스케일링)
-  const startX = bot.x;
-  const startY = bot.y;
-  bot.drawingSequence = points.map(pt => ({
-    x: Math.max(100, Math.min(WORLD_WIDTH - 100, startX + (pt.dx || 0) * 2.2)),
-    y: Math.max(100, Math.min(WORLD_HEIGHT - 100, startY + (pt.dy || 0) * 2.2))
+  const sequence = points.map(pt => ({
+    x: Math.max(100, Math.min(WORLD_WIDTH - 100, spawnX + (pt.dx || 0) * 2.2)),
+    y: Math.max(100, Math.min(WORLD_HEIGHT - 100, spawnY + (pt.dy || 0) * 2.2))
   }));
-  bot.bubbleText = `🎨 "${prompt.trim()}" 그리는 중!`;
-  bot.bubbleTimer = 350;
-  bot.requestedPrompt = prompt.trim();
-  bot.exitCountdown = null;
+
+  let bot = roomAiBots[code].find(b => b.isAi);
+  if (!bot) {
+    bot = {
+      id: `ai-artist-${Date.now()}`,
+      room: code,
+      nickname: chosenName,
+      color: chosenColor,
+      x: spawnX,
+      y: spawnY,
+      angle: 0,
+      speed: 7.2,
+      isDrawing: true,
+      isAi: true,
+      isTemporary: true, // 그림 완성 후 자동 퇴장 플래그
+      isFinished: false,
+      drawingSequence: sequence,
+      bubbleText: `🎨 "${prompt.trim()}" 그리는 중!`,
+      bubbleTimer: 350,
+      requestedPrompt: prompt.trim(),
+      exitCountdown: null,
+      turnTimer: 0,
+      prevX: spawnX,
+      prevY: spawnY
+    };
+    roomAiBots[code].push(bot);
+  } else {
+    bot.x = spawnX;
+    bot.y = spawnY;
+    bot.prevX = spawnX;
+    bot.prevY = spawnY;
+    bot.isTemporary = true;
+    bot.isFinished = false;
+    bot.color = chosenColor;
+    bot.nickname = chosenName;
+    bot.drawingSequence = sequence;
+    bot.bubbleText = `🎨 "${prompt.trim()}" 그리는 중!`;
+    bot.bubbleTimer = 350;
+    bot.requestedPrompt = prompt.trim();
+    bot.exitCountdown = null;
+  }
 
   // 운영 로그 기록
   const now = new Date().toTimeString().split(' ')[0];
@@ -1272,14 +1278,16 @@ setInterval(() => {
           bot.drawingSequence.shift();
           if (bot.drawingSequence.length === 0) {
             bot.bubbleText = `✨ "${bot.requestedPrompt || '작품'}" 완성! 안녕! 👋`;
-            bot.bubbleTimer = 100;
+            bot.bubbleTimer = 180;
+            bot.isDrawing = false;
+            bot.isFinished = true;
             if (bot.isTemporary) {
-              bot.exitCountdown = 60; // 약 1.5초간 완성작 감상 후 퇴장
+              bot.exitCountdown = 90; // 약 1.5초간 완성작 감상 후 퇴장
             }
           }
         } else {
           bot.angle = Math.atan2(tdy, tdx);
-          bot.speed = 6.8;
+          bot.speed = 7.0;
         }
       } else if (bot.exitCountdown !== null && bot.exitCountdown !== undefined) {
         bot.exitCountdown--;
@@ -1290,11 +1298,13 @@ setInterval(() => {
           continue;
         }
       } else if (bot.isTemporary) {
-        // 할 일을 마친 임시 봇 퇴장
-        roomAiBots[room] = roomAiBots[room].filter(b => b.id !== bot.id);
-        continue;
+        // 이미 완성했으나 exitCountdown이 지난 임시 봇만 퇴장
+        if (bot.isFinished) {
+          roomAiBots[room] = roomAiBots[room].filter(b => b.id !== bot.id);
+          continue;
+        }
       } else {
-        // 일반 자율 배회 (관리자 소환 봇)
+        // 일반 자율 배회 (관리자 소환 영구 봇)
         bot.turnTimer = (bot.turnTimer || 0) + 1;
         if (bot.turnTimer > 30) {
           bot.angle += (Math.random() - 0.5) * 0.8;

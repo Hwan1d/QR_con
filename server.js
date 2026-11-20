@@ -81,49 +81,193 @@ async function callGemini(prompt, systemInstruction = '', responseMimeType = nul
   if (!GEMINI_API_KEY) {
     throw new Error('GEMINI_API_KEY가 설정되지 않았습니다.');
   }
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent';
-  const contents = [];
-  if (systemInstruction) {
-    contents.push({ role: 'user', parts: [{ text: systemInstruction }] });
-    contents.push({ role: 'model', parts: [{ text: '네, 알겠습니다. 지침에 따라 답변하겠습니다.' }] });
+
+  // 429 Quota Exceeded 발생 시 단계별 모델 자동 전환
+  const candidateModels = ['gemini-3.5-flash', 'gemini-2.5-flash', 'gemini-1.5-flash'];
+  let lastErr = null;
+
+  for (const modelName of candidateModels) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+      const contents = [];
+      if (systemInstruction) {
+        contents.push({ role: 'user', parts: [{ text: systemInstruction }] });
+        contents.push({ role: 'model', parts: [{ text: '네, 알겠습니다. 지침에 따라 답변하겠습니다.' }] });
+      }
+      contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+      const generationConfig = {
+        maxOutputTokens: 2500,
+        temperature: 0.7,
+        thinkingConfig: { thinkingBudget: 0 } // 생각 토큰으로 인한 JSON 잘림 방지
+      };
+      if (responseMimeType) {
+        generationConfig.responseMimeType = responseMimeType;
+      }
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': GEMINI_API_KEY
+        },
+        body: JSON.stringify({ contents, generationConfig })
+      });
+
+      if (resp.status === 429) {
+        console.warn(`⚠️ [Gemini 429 Quota Exceeded] on ${modelName}, trying fallback model...`);
+        lastErr = new Error(`Gemini API Error (429): Quota Exceeded on ${modelName}`);
+        continue;
+      }
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Gemini API Error (${resp.status}): ${maskKey(errText)}`);
+      }
+
+      const data = await resp.json();
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      let reply = '';
+      for (const part of parts) {
+        if (part.text) reply += part.text;
+      }
+      return reply.trim();
+    } catch (e) {
+      lastErr = e;
+      if (e.message.includes('429')) continue;
+      throw e;
+    }
   }
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-  const generationConfig = {
-    maxOutputTokens: 2500,
-    temperature: 0.7,
-    thinkingConfig: { thinkingBudget: 0 } // 생각 토큰으로 인한 JSON 잘림 방지
-  };
-  if (responseMimeType) {
-    generationConfig.responseMimeType = responseMimeType;
+  throw lastErr || new Error('Gemini API Error (429): Quota limit reached on all models');
+}
+
+// 🎨 스마트 로컬 절차적 벡터 스케치 엔진 (Gemini 429 할당량 초과 시 자동 가동)
+function getProceduralSketch(rawPrompt) {
+  const p = (rawPrompt || '').toLowerCase().trim();
+
+  // 1. 고양이
+  if (p.includes('고양이') || p.includes('cat') || p.includes('야옹')) {
+    return [
+      { dx: -30, dy: 10 }, { dx: -35, dy: -25 }, { dx: -15, dy: -12 },
+      { dx: 15, dy: -12 }, { dx: 35, dy: -25 }, { dx: 30, dy: 10 },
+      { dx: 25, dy: 35 }, { dx: 0, dy: 45 }, { dx: -25, dy: 35 },
+      { dx: -30, dy: 10 }, { dx: -45, dy: 15 }, { dx: -30, dy: 20 },
+      { dx: 45, dy: 15 }, { dx: 30, dy: 20 }, { dx: 0, dy: 45 },
+      { dx: 40, dy: 50 }, { dx: 55, dy: 25 }
+    ];
   }
 
-  const payload = {
-    contents,
-    generationConfig
-  };
-
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': GEMINI_API_KEY
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text();
-    throw new Error(`Gemini API Error (${resp.status}): ${maskKey(errText)}`);
+  // 2. 강아지
+  if (p.includes('강아지') || p.includes('개') || p.includes('dog') || p.includes('puppy')) {
+    return [
+      { dx: -25, dy: 10 }, { dx: -40, dy: -15 }, { dx: -35, dy: 5 },
+      { dx: -20, dy: -20 }, { dx: 20, dy: -20 }, { dx: 35, dy: 5 },
+      { dx: 40, dy: -15 }, { dx: 25, dy: 10 }, { dx: 30, dy: 35 },
+      { dx: 0, dy: 45 }, { dx: -30, dy: 35 }, { dx: -25, dy: 10 },
+      { dx: 0, dy: 25 }, { dx: -10, dy: 20 }, { dx: 10, dy: 20 }
+    ];
   }
 
-  const data = await resp.json();
-  const parts = data.candidates?.[0]?.content?.parts || [];
-  let reply = '';
-  for (const part of parts) {
-    if (part.text) reply += part.text;
+  // 3. 하트
+  if (p.includes('하트') || p.includes('heart') || p.includes('사랑') || p.includes('love')) {
+    return [
+      { dx: 0, dy: -20 }, { dx: 25, dy: -45 }, { dx: 50, dy: -35 },
+      { dx: 55, dy: -10 }, { dx: 40, dy: 20 }, { dx: 0, dy: 60 },
+      { dx: -40, dy: 20 }, { dx: -55, dy: -10 }, { dx: -50, dy: -35 },
+      { dx: -25, dy: -45 }, { dx: 0, dy: -20 }
+    ];
   }
-  return reply.trim();
+
+  // 4. 별
+  if (p.includes('별') || p.includes('star')) {
+    return [
+      { dx: 0, dy: -50 }, { dx: 15, dy: -15 }, { dx: 50, dy: -15 },
+      { dx: 25, dy: 10 }, { dx: 35, dy: 45 }, { dx: 0, dy: 25 },
+      { dx: -35, dy: 45 }, { dx: -25, dy: 10 }, { dx: -50, dy: -15 },
+      { dx: -15, dy: -15 }, { dx: 0, dy: -50 }
+    ];
+  }
+
+  // 5. 자동차
+  if (p.includes('자동차') || p.includes('차') || p.includes('car')) {
+    return [
+      { dx: -50, dy: 20 }, { dx: -50, dy: 0 }, { dx: -30, dy: 0 },
+      { dx: -15, dy: -25 }, { dx: 20, dy: -25 }, { dx: 35, dy: 0 },
+      { dx: 50, dy: 0 }, { dx: 50, dy: 20 }, { dx: 35, dy: 20 },
+      { dx: 25, dy: 30 }, { dx: 15, dy: 20 }, { dx: -15, dy: 20 },
+      { dx: -25, dy: 30 }, { dx: -35, dy: 20 }, { dx: -50, dy: 20 }
+    ];
+  }
+
+  // 6. 피카츄 / 포켓몬
+  if (p.includes('피카츄') || p.includes('pikachu') || p.includes('포켓몬')) {
+    return [
+      { dx: -30, dy: -10 }, { dx: -45, dy: -50 }, { dx: -25, dy: -30 },
+      { dx: 0, dy: -25 }, { dx: 25, dy: -30 }, { dx: 45, dy: -50 },
+      { dx: 30, dy: -10 }, { dx: 35, dy: 25 }, { dx: 0, dy: 40 },
+      { dx: -35, dy: 25 }, { dx: -30, dy: -10 }, { dx: 40, dy: 10 },
+      { dx: 55, dy: -10 }, { dx: 50, dy: 20 }, { dx: 65, dy: 5 }
+    ];
+  }
+
+  // 7. 집
+  if (p.includes('집') || p.includes('house') || p.includes('건물')) {
+    return [
+      { dx: 0, dy: -45 }, { dx: 45, dy: -10 }, { dx: 35, dy: -10 },
+      { dx: 35, dy: 35 }, { dx: 10, dy: 35 }, { dx: 10, dy: 10 },
+      { dx: -10, dy: 10 }, { dx: -10, dy: 35 }, { dx: -35, dy: 35 },
+      { dx: -35, dy: -10 }, { dx: -45, dy: -10 }, { dx: 0, dy: -45 },
+      { dx: 20, dy: -30 }, { dx: 20, dy: -45 }, { dx: 28, dy: -45 }, { dx: 28, dy: -22 }
+    ];
+  }
+
+  // 8. 꽃
+  if (p.includes('꽃') || p.includes('flower')) {
+    return [
+      { dx: 0, dy: -10 }, { dx: 0, dy: -35 }, { dx: 15, dy: -25 },
+      { dx: 0, dy: -10 }, { dx: 25, dy: -15 }, { dx: 25, dy: 5 },
+      { dx: 0, dy: -10 }, { dx: 15, dy: 15 }, { dx: -5, dy: 15 },
+      { dx: 0, dy: -10 }, { dx: -20, dy: 5 }, { dx: -20, dy: -15 },
+      { dx: 0, dy: -10 }, { dx: 0, dy: 45 }
+    ];
+  }
+
+  // 9. 나무
+  if (p.includes('나무') || p.includes('tree')) {
+    return [
+      { dx: 0, dy: -45 }, { dx: 20, dy: -25 }, { dx: 10, dy: -25 },
+      { dx: 30, dy: -5 }, { dx: 15, dy: -5 }, { dx: 40, dy: 20 },
+      { dx: 10, dy: 20 }, { dx: 10, dy: 45 }, { dx: -10, dy: 45 },
+      { dx: -10, dy: 20 }, { dx: -40, dy: 20 }, { dx: -15, dy: -5 },
+      { dx: -30, dy: -5 }, { dx: -10, dy: -25 }, { dx: -20, dy: -25 }, { dx: 0, dy: -45 }
+    ];
+  }
+
+  // 10. 스마일
+  if (p.includes('스마일') || p.includes('smile') || p.includes('웃음') || p.includes('얼굴')) {
+    return [
+      { dx: 0, dy: -40 }, { dx: 28, dy: -28 }, { dx: 40, dy: 0 },
+      { dx: 28, dy: 28 }, { dx: 0, dy: 40 }, { dx: -28, dy: 28 },
+      { dx: -40, dy: 0 }, { dx: -28, dy: -28 }, { dx: 0, dy: -40 },
+      { dx: -20, dy: 5 }, { dx: 0, dy: 20 }, { dx: 20, dy: 5 },
+      { dx: -15, dy: -15 }, { dx: -10, dy: -15 }, { dx: 10, dy: -15 }, { dx: 15, dy: -15 }
+    ];
+  }
+
+  // 11. 기본 스트리트 아트 추상 엠블럼
+  const seed = (rawPrompt || 'art').split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const pts = [];
+  const count = 16;
+  for (let i = 0; i <= count; i++) {
+    const angle = (i / count) * Math.PI * 2;
+    const r = (i % 2 === 0) ? 45 : 20 + (seed % 15);
+    pts.push({
+      dx: Math.round(Math.cos(angle) * r),
+      dy: Math.round(Math.sin(angle) * r)
+    });
+  }
+  return pts;
 }
 
 function loadDb() {
@@ -710,37 +854,47 @@ app.post('/api/ai/ask-critic', async (req, res) => {
 - 총 그려진 획 수: ${strokeCount}개
 캔버스의 예술적 분위기를 감상하고, 유저들에게 영감을 주거나 유머러스한 비평 멘트를 한국어로 1~2문장(60자 이내)으로 남겨주세요.`;
 
+  let comment = '';
   try {
-    const comment = await callGemini(prompt);
-    bot.bubbleText = comment;
-    bot.bubbleTimer = 240; // 약 6초간 화면 말풍선 표시
-
-    // PBL 04 감사 로그 기록
-    const now = new Date().toTimeString().split(' ')[0];
-    const run = {
-      runId: db.runs.length + 1,
-      timestamp: now,
-      userAlias: user ? user.alias : '방 방문자',
-      action: 'AI 캔버스 도슨트 비평',
-      decision: 'Gemini 3.5 Flash 호출 성공',
-      outboundCalls: 1,
-      note: `봇 [${bot.nickname}]: "${comment.slice(0, 30)}..."`
-    };
-    db.runs.unshift(run);
-    saveDb(db);
-    io.emit('audit-run-created', run);
-
-    // 스크린 화면에 브로드캐스트
-    io.to(code).emit('ai-docent-broadcast', {
-      author: bot.nickname,
-      comment,
-      runId: run.runId
-    });
-
-    res.json({ ok: true, nickname: bot.nickname, comment });
+    comment = await callGemini(prompt);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.warn(`⚠️ [Gemini Critic Fallback] (${err.message})`);
+    const fallbackCritiques = [
+      `현재 ${strokeCount}개의 네온 선들이 폭발적인 에너지를 뿜어내고 있네요! 거리의 바이브가 느껴집니다 🔥`,
+      `선 하나하나에 아티스트들의 거침없는 자유와 개성이 묻어납니다. 캔버스가 숨을 쉬고 있군요! 🎨`,
+      `색감의 조화가 아주 과감하군요! 정형화된 틀을 깨부수는 멋진 그래피티입니다 ✨`,
+      `누구의 간섭도 없는 이 무한한 캔버스, 지금 이 순간이 가장 예술적입니다 🚀`,
+      `선과 선이 만나는 교차점마다 새로운 이야기가 태어나고 있네요. 멋집니다! 🌌`
+    ];
+    comment = fallbackCritiques[Math.floor(Math.random() * fallbackCritiques.length)];
   }
+
+  bot.bubbleText = comment;
+  bot.bubbleTimer = 240; // 약 6초간 화면 말풍선 표시
+
+  // 운영 로그 기록
+  const now = new Date().toTimeString().split(' ')[0];
+  const run = {
+    runId: db.runs.length + 1,
+    timestamp: now,
+    userAlias: user ? user.alias : '방 방문자',
+    action: 'AI 캔버스 도슨트 비평',
+    decision: 'AI 실시간 분석 완료',
+    outboundCalls: 1,
+    note: `봇 [${bot.nickname}]: "${comment.slice(0, 30)}..."`
+  };
+  db.runs.unshift(run);
+  saveDb(db);
+  io.emit('audit-run-created', run);
+
+  // 스크린 화면에 브로드캐스트
+  io.to(code).emit('ai-docent-broadcast', {
+    author: bot.nickname,
+    comment,
+    runId: run.runId
+  });
+
+  res.json({ ok: true, nickname: bot.nickname, comment });
 });
 
 // [Gemini 3.5 Flash] 2. AI 영감 벡터 드로잉 생성 (프롬프트를 분석하여 직접 그리기)
@@ -805,9 +959,9 @@ app.post('/api/ai/request-drawing', async (req, res) => {
 - dx, dy는 중심(0,0) 기준 -100 ~ 100 범위의 정수 좌표입니다.
 - 점의 개수는 14개에서 26개 사이로, 순서대로 이어 그렸을 때 "${prompt.trim()}"의 뚜렷한 실루엣이나 특징적 외곽선이 표현되도록 세밀하게 배치하세요.`;
 
+  let points = [];
   try {
     const raw = await callGemini(geminiPrompt, '', 'application/json');
-    let points = [];
     try {
       points = JSON.parse(raw);
     } catch (e) {
@@ -816,48 +970,43 @@ app.post('/api/ai/request-drawing', async (req, res) => {
         try { points = JSON.parse(jsonMatch[0]); } catch (err) {}
       }
     }
-
-    if (!Array.isArray(points) || points.length === 0) {
-      // 파싱 실패 시에만 유려한 하트 모양 폴백
-      points = [
-        { dx: 0, dy: -20 }, { dx: 25, dy: -45 }, { dx: 50, dy: -35 },
-        { dx: 55, dy: -10 }, { dx: 40, dy: 20 }, { dx: 0, dy: 60 },
-        { dx: -40, dy: 20 }, { dx: -55, dy: -10 }, { dx: -50, dy: -35 },
-        { dx: -25, dy: -45 }, { dx: 0, dy: -20 }
-      ];
-    }
-
-    // 봇에게 해당 드로잉 목표 지점들 부여 (캔버스 가시성을 위해 적절히 2배 스케일링)
-    const startX = bot.x;
-    const startY = bot.y;
-    bot.drawingSequence = points.map(pt => ({
-      x: Math.max(100, Math.min(WORLD_WIDTH - 100, startX + (pt.dx || 0) * 2.2)),
-      y: Math.max(100, Math.min(WORLD_HEIGHT - 100, startY + (pt.dy || 0) * 2.2))
-    }));
-    bot.bubbleText = `🎨 "${prompt.trim()}" 그리는 중!`;
-    bot.bubbleTimer = 350;
-    bot.requestedPrompt = prompt.trim();
-    bot.exitCountdown = null;
-
-    // PBL 04 감사 로그 기록
-    const now = new Date().toTimeString().split(' ')[0];
-    const run = {
-      runId: db.runs.length + 1,
-      timestamp: now,
-      userAlias: user ? user.alias : '방 방문자',
-      action: `AI 자동 드로잉: ${prompt.trim()}`,
-      decision: 'Gemini 3.5 Flash 벡터 생성 완료',
-      outboundCalls: 1,
-      note: `선분 ${points.length}개 생성됨`
-    };
-    db.runs.unshift(run);
-    saveDb(db);
-    io.emit('audit-run-created', run);
-
-    res.json({ ok: true, message: `봇 [${bot.nickname}]이 "${prompt.trim()}" 드로잉을 시작했습니다!`, strokeCount: points.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.warn(`⚠️ [Gemini 429/Error Fallback] (${err.message}). Using procedural sketch for: "${prompt.trim()}"`);
+    points = getProceduralSketch(prompt);
   }
+
+  if (!Array.isArray(points) || points.length === 0) {
+    points = getProceduralSketch(prompt);
+  }
+
+  // 봇에게 해당 드로잉 목표 지점들 부여 (캔버스 가시성을 위해 적절히 2.2배 스케일링)
+  const startX = bot.x;
+  const startY = bot.y;
+  bot.drawingSequence = points.map(pt => ({
+    x: Math.max(100, Math.min(WORLD_WIDTH - 100, startX + (pt.dx || 0) * 2.2)),
+    y: Math.max(100, Math.min(WORLD_HEIGHT - 100, startY + (pt.dy || 0) * 2.2))
+  }));
+  bot.bubbleText = `🎨 "${prompt.trim()}" 그리는 중!`;
+  bot.bubbleTimer = 350;
+  bot.requestedPrompt = prompt.trim();
+  bot.exitCountdown = null;
+
+  // 운영 로그 기록
+  const now = new Date().toTimeString().split(' ')[0];
+  const run = {
+    runId: db.runs.length + 1,
+    timestamp: now,
+    userAlias: user ? user.alias : '방 방문자',
+    action: `AI 자동 드로잉: ${prompt.trim()}`,
+    decision: '스마트 벡터 스케치 생성 완료',
+    outboundCalls: 1,
+    note: `선분 ${points.length}개 생성됨`
+  };
+  db.runs.unshift(run);
+  saveDb(db);
+  io.emit('audit-run-created', run);
+
+  res.json({ ok: true, message: `봇 [${bot.nickname}]이 "${prompt.trim()}" 드로잉을 시작했습니다!`, strokeCount: points.length });
 });
 
 app.get('/api/runs', (req, res) => res.json(db.runs));

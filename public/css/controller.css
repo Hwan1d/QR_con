@@ -1,0 +1,382 @@
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      min-height: 100dvh;
+      background: radial-gradient(circle at top, #141726 0%, #080a10 100%);
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    /* 상단 상태 바 */
+    .top-bar {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .room-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .room-badge {
+      background: #9333ea;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 800;
+    }
+
+    .user-tag {
+      font-weight: 800;
+      color: #00f5d4;
+    }
+
+    /* 듀얼 모드 전환 탭 (조이스틱 vs 터치 캔버스) */
+    .mode-tab-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: 10px;
+    }
+
+    .mode-tab-btn {
+      padding: 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #888;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .mode-tab-btn.active {
+      background: #00f5d4;
+      color: #070810;
+      box-shadow: 0 0 10px rgba(0, 245, 212, 0.4);
+    }
+
+    /* 색상 팔레트 */
+    .palette {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 0;
+      align-items: center;
+    }
+
+    .swatch {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.2s;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+    }
+    .swatch.active {
+      transform: scale(1.2);
+      border-color: #fff;
+      box-shadow: 0 0 10px currentColor;
+    }
+
+    .swatch-transparent {
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px dashed #aaa;
+      color: #ff595e;
+      font-weight: bold;
+    }
+    .swatch-transparent.active {
+      border-color: #ff595e;
+      box-shadow: 0 0 10px #ff595e;
+    }
+
+    .swatch-eraser {
+      background: rgba(255, 255, 255, 0.2);
+      border: 1.5px solid #ffffff;
+      color: #ffffff;
+      font-size: 13px;
+    }
+    .swatch-eraser.active {
+      border-color: #00f5d4;
+      box-shadow: 0 0 12px #ffffff;
+      transform: scale(1.2);
+    }
+
+    .eraser-size-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 8px;
+      margin-top: 4px;
+    }
+    .btn-eraser-size {
+      flex: 1;
+      padding: 5px 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #ccc;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-eraser-size.active {
+      background: #ffffff;
+      color: #000000;
+      border-color: #ffffff;
+      box-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
+    }
+
+    .ai-action-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .btn-ai-action {
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(192, 132, 252, 0.4);
+      background: rgba(147, 51, 234, 0.15);
+      color: #e9d5ff;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+    }
+    .btn-ai-action:active { transform: scale(0.98); }
+
+    /* 중앙 조이스틱 / 캔버스 영역 */
+    .center-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      margin: 8px 0;
+      position: relative;
+    }
+
+    #joystick-view {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+    }
+
+    .joystick-zone {
+      position: relative;
+      width: 220px;
+      height: 220px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 70%);
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: none;
+    }
+
+    .joystick-stick {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #00f5d4, #00bbf9);
+      box-shadow: 0 0 20px rgba(0, 245, 212, 0.6);
+      position: absolute;
+      pointer-events: none;
+    }
+
+    #canvas-view {
+      display: none;
+      width: 100%;
+      height: 100%;
+      min-height: 240px;
+      background: rgba(0, 0, 0, 0.6);
+      border: 2px solid rgba(0, 245, 212, 0.35);
+      border-radius: 16px;
+      position: relative;
+      touch-action: none;
+    }
+
+    #touch-draw-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* 하단 유저 도구 & 방장 관리자 바 */
+    .bottom-tools {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .btn-clear-mine {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-clear-mine:active { transform: scale(0.98); }
+
+    /* 방장(Owner) 전용 패널 */
+    .owner-panel {
+      display: none;
+      background: rgba(147, 51, 234, 0.15);
+      border: 1px solid rgba(192, 132, 252, 0.4);
+      border-radius: 12px;
+      padding: 8px 10px;
+      font-size: 11px;
+    }
+
+    .btn-owner {
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* 로그인 모달 */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.88);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+      backdrop-filter: blur(8px);
+    }
+
+    .modal-card {
+      background: #141726;
+      border: 1.5px solid #00f5d4;
+      border-radius: 20px;
+      padding: 22px;
+      width: 100%;
+      max-width: 380px;
+      box-shadow: 0 0 40px rgba(0, 245, 212, 0.25);
+    }
+
+    .auth-tab-bar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 16px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px;
+      border-radius: 10px;
+    }
+    .auth-tab-btn {
+      padding: 8px;
+      border: none;
+      border-radius: 8px;
+      background: transparent;
+      color: #888;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .auth-tab-btn.active {
+      background: #00f5d4;
+      color: #0c0e18;
+      box-shadow: 0 0 10px rgba(0, 245, 212, 0.4);
+    }
+    .auth-input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      margin-bottom: 12px;
+      text-align: left;
+    }
+    .auth-input-group label {
+      font-size: 11px;
+      color: #aaa;
+      font-weight: 700;
+    }
+    .auth-input {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.5);
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+    }
+    .auth-input:focus {
+      border-color: #00f5d4;
+      box-shadow: 0 0 8px rgba(0, 245, 212, 0.3);
+    }
+    .btn-auth-submit {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      background: #00f5d4;
+      color: #070810;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(0, 245, 212, 0.4);
+      margin-top: 6px;
+    }
+    .btn-auth-submit:active { transform: scale(0.98); }
+    .role-options {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .role-option-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      font-size: 11px;
+      cursor: pointer;
+    }

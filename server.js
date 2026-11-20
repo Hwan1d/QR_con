@@ -15,18 +15,34 @@ const PORT = process.env.PORT || 3000;
 const DB_FILE = path.join(__dirname, 'pbl04_qr_db.json');
 const ENV_FILE = path.join(__dirname, '.env');
 
-// .env 로드
+// .env 및 환경 변수 로드
 let GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+let SUPABASE_URL = process.env.SUPABASE_URL || '';
+let SUPABASE_KEY = process.env.SUPABASE_KEY || '';
+
 if (fs.existsSync(ENV_FILE)) {
   const envContent = fs.readFileSync(ENV_FILE, 'utf-8');
   for (const line of envContent.split('\n')) {
     const trimmed = line.trim();
     if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
-      const [k, v] = trimmed.split('=');
-      if (k.trim() === 'GEMINI_API_KEY') {
-        GEMINI_API_KEY = v.trim().replace(/^['"]|['"]$/g, '');
-      }
+      const idx = trimmed.indexOf('=');
+      const k = trimmed.slice(0, idx).trim();
+      const v = trimmed.slice(idx + 1).trim().replace(/^['"]|['"]$/g, '');
+      if (k === 'GEMINI_API_KEY' && !GEMINI_API_KEY) GEMINI_API_KEY = v;
+      if (k === 'SUPABASE_URL' && !SUPABASE_URL) SUPABASE_URL = v;
+      if (k === 'SUPABASE_KEY' && !SUPABASE_KEY) SUPABASE_KEY = v;
     }
+  }
+}
+
+let supabase = null;
+if (SUPABASE_URL && SUPABASE_KEY) {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log('🔗 [Supabase] Connected to Cloud Database:', SUPABASE_URL);
+  } catch (e) {
+    console.warn('⚠️ Supabase client init warning:', e.message);
   }
 }
 
@@ -167,6 +183,95 @@ function saveDb(data) {
 }
 
 let db = loadDb();
+
+function addStrokeToRoom(roomCode, stroke) {
+  if (!db.rooms[roomCode]) return;
+  if (!db.rooms[roomCode].strokes) db.rooms[roomCode].strokes = [];
+  db.rooms[roomCode].strokes.push(stroke);
+  if (db.rooms[roomCode].strokes.length > 5000) db.rooms[roomCode].strokes.shift();
+
+  if (supabase) {
+    const uid = stroke.authorId || stroke.userId || 'guest';
+    supabase.from('canvas_strokes').insert({
+      id: stroke.id || makeStrokeId(),
+      room_code: roomCode,
+      user_id: uid,
+      color: stroke.color,
+      width: Number(stroke.width) || 3,
+      x1: Math.round(stroke.x1),
+      y1: Math.round(stroke.y1),
+      x2: Math.round(stroke.x2),
+      y2: Math.round(stroke.y2)
+    }).then(({ error }) => {
+      if (error) console.error('Supabase stroke insert error:', error.message);
+    });
+  }
+}
+
+async function syncFromSupabase() {
+  if (!supabase) return;
+  try {
+    console.log('🔄 [Supabase] Syncing cloud DB into server memory...');
+    const { data: users, error: uErr } = await supabase.from('users').select('*');
+    if (!uErr && users) {
+      users.forEach(u => {
+        db.users[u.user_id] = {
+          userId: u.user_id,
+          alias: u.alias || u.user_id,
+          password: u.password,
+          passwordHash: hashPw(u.password),
+          role: u.role || 'user'
+        };
+      });
+    }
+
+    const { data: rooms, error: rErr } = await supabase.from('rooms').select('*');
+    if (!rErr && rooms) {
+      for (const r of rooms) {
+        if (!db.rooms[r.code]) {
+          db.rooms[r.code] = {
+            code: r.code,
+            title: r.title,
+            owner: r.owner,
+            isSecret: !!r.is_secret,
+            secretCodeHash: r.secret_code ? hashPw(r.secret_code) : null,
+            secretCode: r.secret_code,
+            strokes: [],
+            createdAt: r.created_at
+          };
+        }
+      }
+    }
+
+    const { data: strokes, error: sErr } = await supabase.from('canvas_strokes').select('*').order('created_at', { ascending: true });
+    if (!sErr && strokes) {
+      for (const r of Object.values(db.rooms)) {
+        r.strokes = [];
+      }
+      strokes.forEach(s => {
+        if (db.rooms[s.room_code]) {
+          db.rooms[s.room_code].strokes.push({
+            id: s.id,
+            room: s.room_code,
+            userId: s.user_id,
+            authorId: s.user_id,
+            color: s.color,
+            width: Number(s.width) || 3,
+            x1: Number(s.x1),
+            y1: Number(s.y1),
+            x2: Number(s.x2),
+            y2: Number(s.y2)
+          });
+        }
+      });
+      console.log(`✅ [Supabase] Synced ${users?.length || 0} users, ${rooms?.length || 0} rooms, ${strokes.length} canvas strokes!`);
+    }
+  } catch (err) {
+    console.error('❌ [Supabase] Sync error:', err.message);
+  }
+}
+
+syncFromSupabase();
 const SESSIONS = {}; // token -> { userId, alias, role }
 
 // 방별 플레이어 메모리 상태: roomCode -> { socketId: playerObj }
@@ -241,6 +346,16 @@ app.post('/api/auth/register', (req, res) => {
     updatedAt: new Date().toISOString()
   };
   saveDb(db);
+  if (supabase) {
+    supabase.from('users').insert({
+      user_id: cleanId,
+      password: password,
+      alias: cleanAlias,
+      role: (role === 'admin') ? 'admin' : 'user'
+    }).then(({ error }) => {
+      if (error) console.error('Supabase user insert error:', error.message);
+    });
+  }
 
   const token = crypto.randomUUID();
   SESSIONS[token] = {
@@ -256,7 +371,7 @@ app.post('/api/auth/login', (req, res) => {
   const { userId, password } = req.body;
   const cleanId = (userId || '').trim();
   const user = db.users[cleanId];
-  if (!user || user.passwordHash !== hashPw(password)) {
+  if (!user || (user.passwordHash !== hashPw(password) && user.password !== password)) {
     return res.status(401).json({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' });
   }
 
@@ -377,6 +492,17 @@ app.post('/api/rooms/create', (req, res) => {
     createdAt: new Date().toISOString()
   };
   saveDb(db);
+  if (supabase) {
+    supabase.from('rooms').insert({
+      code: roomCode,
+      title: title || `${roomCode} 벽화 갤러리`,
+      owner: user ? user.userId : 'user_a',
+      is_secret: !!isSecret,
+      secret_code: isSecret ? secretCode.trim() : null
+    }).then(({ error }) => {
+      if (error) console.error('Supabase room insert error:', error.message);
+    });
+  }
   res.json({ message: '방이 생성되었습니다.', room: db.rooms[roomCode] });
 });
 
@@ -425,6 +551,11 @@ app.post('/api/canvas/clear-all', (req, res) => {
 
   room.strokes = [];
   saveDb(db);
+  if (supabase) {
+    supabase.from('canvas_strokes').delete().eq('room_code', code).then(({ error }) => {
+      if (error) console.error('Supabase clear-all error:', error.message);
+    });
+  }
   io.to(code).emit('canvas-cleared-all');
   res.json({ message: '캔버스 전체가 초기화되었습니다.' });
 });
@@ -441,9 +572,17 @@ app.post('/api/canvas/clear-mine', (req, res) => {
 
   const initialCount = room.strokes.length;
   // 내 userId(소유자)가 아닌 획들만 남김
-  room.strokes = room.strokes.filter(s => s.authorId !== user.userId);
+  room.strokes = room.strokes.filter(s => s.authorId !== user.userId && s.userId !== user.userId);
   const removedCount = initialCount - room.strokes.length;
   saveDb(db);
+  if (supabase) {
+    supabase.from('canvas_strokes').delete()
+      .eq('room_code', code)
+      .eq('user_id', user.userId)
+      .then(({ error }) => {
+        if (error) console.error('Supabase clear-mine error:', error.message);
+      });
+  }
 
   // 방 전체에 갱신된 캔버스 히스토리 재발송
   io.to(code).emit('init-canvas-history', { strokes: room.strokes, room: code });
@@ -857,8 +996,7 @@ io.on('connection', (socket) => {
         authorId: p ? p.userId : 'guest' // 소유권 메타데이터 부여!
       };
 
-      db.rooms[room].strokes.push(worldStroke);
-      if (db.rooms[room].strokes.length > 5000) db.rooms[room].strokes.shift();
+      addStrokeToRoom(room, worldStroke);
       io.to(room).emit('live-stroke-drawn', worldStroke);
     }
   });
@@ -930,8 +1068,7 @@ setInterval(() => {
               width: 8,
               authorId: p.userId // 내 소유권 태그
             };
-            db.rooms[room].strokes.push(stroke);
-            if (db.rooms[room].strokes.length > 5000) db.rooms[room].strokes.shift();
+            addStrokeToRoom(room, stroke);
             io.to(room).emit('live-stroke-drawn', stroke);
           }
         }
@@ -997,8 +1134,7 @@ setInterval(() => {
             width: 7,
             authorId: bot.id // AI 소유권 태그
           };
-          db.rooms[room].strokes.push(aiStroke);
-          if (db.rooms[room].strokes.length > 5000) db.rooms[room].strokes.shift();
+          addStrokeToRoom(room, aiStroke);
           io.to(room).emit('live-stroke-drawn', aiStroke);
         }
       }

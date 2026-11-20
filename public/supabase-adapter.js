@@ -2,6 +2,12 @@
 // 🎨 Supabase Serverless Adapter & Realtime Engine
 // ========================================================
 (function() {
+  // 실제 백엔드 서버(Node.js / Render / Localhost)가 가동 중인 환경에서는
+  // 백엔드(server.js)가 모든 API, Socket.io, DB 저장을 직접 안전하게 처리하므로 어댑터를 실행하지 않습니다.
+  if (window.location.protocol !== 'file:' && !window.location.hostname.includes('github.io')) {
+    console.log('🚀 [Backend Connected] Live Node.js Backend Server is active on host:', window.location.host);
+    return;
+  }
   const SB_CONFIG = {
     url: 'https://nflvlxalqyyqnlvzqcsy.supabase.co',
     key: 'sb_publishable_0QsGDAtT_I5icqpebayF6w_P2MkQr8M',

@@ -236,7 +236,7 @@
 
       if (urlStr === '/api/rooms/verify-entry' && method === 'POST') {
         const { roomCode, password } = body;
-        const { data, error } = await sb.from('rooms').select('*').eq('code', (roomCode || '').toUpperCase()).single();
+        const { data, error } = await sb.from('rooms').select('*').eq('code', (roomCode || '').toUpperCase()).maybeSingle();
         if (error || !data) {
           return new Response(JSON.stringify({ error: '방을 찾을 수 없습니다.' }), { status: 404 });
         }
@@ -252,8 +252,8 @@
         const token = headers['Authorization']?.replace('Bearer ', '') || currentToken;
         const userId = token.startsWith('sb_token_') ? token.replace('sb_token_', '') : 'guest';
 
-        const { data: user } = await sb.from('users').select('*').eq('user_id', userId).single();
-        const { data: room } = await sb.from('rooms').select('*').eq('code', roomCode).single();
+        const { data: user } = await sb.from('users').select('*').eq('user_id', userId).maybeSingle();
+        const { data: room } = await sb.from('rooms').select('*').eq('code', roomCode).maybeSingle();
 
         const role = user?.role || 'user';
         const isOwner = room?.owner === userId;
@@ -276,7 +276,7 @@
     if (urlStr.startsWith('/api/auth')) {
       if (urlStr === '/api/auth/login' && method === 'POST') {
         const { userId, password } = body;
-        const { data, error } = await sb.from('users').select('*').eq('user_id', userId).eq('password', password).single();
+        const { data, error } = await sb.from('users').select('*').eq('user_id', userId).eq('password', password).maybeSingle();
         if (error || !data) {
           return new Response(JSON.stringify({ error: '아이디 또는 비밀번호가 올바르지 않습니다.' }), { status: 401 });
         }
@@ -291,14 +291,18 @@
 
       if (urlStr === '/api/auth/register' && method === 'POST') {
         const { userId, password, alias, role } = body;
+        const { data: existing } = await sb.from('users').select('user_id').eq('user_id', userId).maybeSingle();
+        if (existing) {
+          return new Response(JSON.stringify({ error: '이미 사용 중인 아이디입니다.' }), { status: 400 });
+        }
         const { data, error } = await sb.from('users').insert({
           user_id: userId,
           password: password,
           alias: alias || userId,
           role: role === 'admin' ? 'admin' : 'user'
-        }).select().single();
-        if (error) {
-          return new Response(JSON.stringify({ error: '이미 사용 중인 아이디이거나 생성에 실패했습니다.' }), { status: 400 });
+        }).select().maybeSingle();
+        if (error || !data) {
+          return new Response(JSON.stringify({ error: error?.message || '회원가입에 실패했습니다.' }), { status: 400 });
         }
         const token = 'sb_token_' + data.user_id;
         currentToken = token;
@@ -315,10 +319,14 @@
           return new Response(JSON.stringify({ error: '인증 필요' }), { status: 401 });
         }
         const userId = token.replace('sb_token_', '');
-        const { data, error } = await sb.from('users').select('*').eq('user_id', userId).single();
+        const { data, error } = await sb.from('users').select('*').eq('user_id', userId).maybeSingle();
         if (error || !data) {
           return new Response(JSON.stringify({ error: '유저를 찾을 수 없음' }), { status: 401 });
         }
+        return new Response(JSON.stringify({
+          user: { userId: data.user_id, role: data.role, alias: data.alias }
+        }), { status: 200 });
+      }
         return new Response(JSON.stringify({
           user: { userId: data.user_id, role: data.role, alias: data.alias }
         }), { status: 200 });

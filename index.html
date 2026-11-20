@@ -4,7 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Infinite Graffiti Rooms & Art Platform</title>
-  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      const s = document.createElement('script');
+      s.src = '/socket.io/socket.io.js';
+      document.head.appendChild(s);
+    }
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="supabase-adapter.js"></script>
@@ -1103,7 +1109,8 @@
     checkLobbyAuth();
 
     // 만약 URL 파라미터에 이미 ?room=... 이 지정되어 들어온 경우 바로 입장 지원
-    const initialRoomParam = params.get('room');
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialRoomParam = urlParams.get('room');
     if (initialRoomParam && authToken) {
       enterGameRoom(initialRoomParam, initialRoomParam);
     }

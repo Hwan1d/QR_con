@@ -1,6 +1,6 @@
 const express = require('express');
 const { db, saveDb, canManageRoom, getSessionUser } = require('../services/dbService');
-const { callGemini, getProceduralSketch } = require('../services/geminiService');
+const { callGemini, getProceduralSketch, generateLightweightPixelStamp, generateLightweightSmoothStamp, generateNanoBananaStamp } = require('../services/geminiService');
 const { WORLD_WIDTH, WORLD_HEIGHT } = require('../config');
 
 const router = express.Router();
@@ -245,6 +245,46 @@ router.post('/request-drawing', async (req, res) => {
   }
 
   res.json({ ok: true, message: `봇 [${bot.nickname}]이 "${prompt.trim()}" 드로잉을 시작했습니다!`, strokeCount: points.length });
+});
+
+// 6. ⚡ AI 스탬프 생성 (초경량 Flash & 🍌 Admin 나노바나나 실험실)
+router.post('/generate-stamp', async (req, res) => {
+  const user = getSessionUser(req);
+  const { prompt, style, modelTier, gridSize } = req.body;
+  if (!prompt || !prompt.trim()) {
+    return res.status(400).json({ error: '생성할 주제를 입력해주세요.' });
+  }
+
+  const cleanPrompt = prompt.trim();
+  const targetStyle = style === 'pixel' ? 'pixel' : 'smooth';
+
+  // 🍌 1. 어드민 전용 나노바나나 (Nano Banana) 모델 실험 요청
+  if (style === 'nano-banana' || modelTier === 'nano-banana') {
+    if (!user || user.role !== 'admin') {
+      return res.status(403).json({ error: '🍌 나노바나나(Nano Banana) 모델 실험실은 오직 최고 관리자(Admin)만 접근 가능합니다.' });
+    }
+    try {
+      const result = await generateNanoBananaStamp(cleanPrompt, targetStyle);
+      return res.json({ ok: true, tier: 'nano-banana', ...result });
+    } catch (err) {
+      console.error('generate-nano-banana error:', err);
+      return res.status(500).json({ error: '나노바나나 스탬프 생성 중 오류가 발생했습니다: ' + err.message });
+    }
+  }
+
+  // 2. 일반 스마트 스탬프 생성 (고도화 픽셀 또는 고도화 SVG 벡터 스티커)
+  try {
+    if (targetStyle === 'pixel') {
+      const result = await generateLightweightPixelStamp(cleanPrompt, gridSize);
+      return res.json({ ok: true, style: 'pixel', ...result });
+    } else {
+      const result = await generateLightweightSmoothStamp(cleanPrompt);
+      return res.json({ ok: true, style: 'smooth', ...result });
+    }
+  } catch (err) {
+    console.error('generate-stamp error:', err);
+    res.status(500).json({ error: '스탬프 생성 중 오류가 발생했습니다.' });
+  }
 });
 
 router.get('/runs', (req, res) => res.json(db.runs || []));

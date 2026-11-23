@@ -1,4 +1,4 @@
-const { db, saveDb, addStroke } = require('../services/dbService');
+const { db, SESSIONS, saveDb, addStroke } = require('../services/dbService');
 const { callGemini } = require('../services/geminiService');
 const { WORLD_WIDTH, WORLD_HEIGHT, makeStrokeId, distToSegment } = require('../config');
 
@@ -18,15 +18,30 @@ function initGameEngine(io, app) {
     // 1. 대형 화면(스크린) 입장
     socket.on('join-screen', (data) => {
       const room = (typeof data === 'string' ? data : data.room || 'LOBBY').toUpperCase();
+      const token = typeof data === 'object' ? data.token : null;
+      const user = token ? SESSIONS[token] : null;
+      const isAdmin = user && user.role === 'admin';
+      const rData = db.rooms[room];
+
+      // 관리자가 폐쇄(CLOSED)한 방은 일반 유저 완전 차단
+      if (rData && rData.isClosed && !isAdmin) {
+        socket.emit('room-session-ended', {
+          room,
+          isClosed: true,
+          reason: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다. 일반 유저는 이용할 수 없습니다.'
+        });
+        return;
+      }
+
       socket.join(room);
       socket.room = room;
-      socket.role = 'screen';
+      socket.role = isAdmin ? 'admin-screen' : 'screen';
 
       if (!roomScreens[room]) roomScreens[room] = new Set();
       roomScreens[room].add(socket.id);
 
-      const rData = db.rooms[room] || { strokes: [] };
-      socket.emit('init-canvas-history', { strokes: rData.strokes, room });
+      const rInit = rData || { strokes: [] };
+      socket.emit('init-canvas-history', { strokes: rInit.strokes, room });
       console.log(`[SCREEN] Joined Room [${room}] (Active screens: ${roomScreens[room].size})`);
     });
 
@@ -48,6 +63,20 @@ function initGameEngine(io, app) {
     // 3. 모바일 컨트롤러 입장
     socket.on('join-controller', (data) => {
       const room = (data.room || 'LOBBY').toUpperCase();
+      const token = data.token;
+      const user = token ? SESSIONS[token] : (data.userId ? db.users[data.userId] : null);
+      const isAdmin = user && user.role === 'admin';
+      const rData = db.rooms[room];
+
+      // 관리자가 닫은 방은 일반 유저 완전 차단
+      if (rData && rData.isClosed && !isAdmin) {
+        socket.emit('room-session-ended', {
+          room,
+          isClosed: true,
+          reason: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다. 일반 유저는 이용할 수 없습니다.'
+        });
+        return;
+      }
 
       // 만약 해당 방에 활성 대형 화면이 열려있지 않다면 컨트롤러 연결 차단 및 안내
       if (!roomScreens[room] || roomScreens[room].size === 0) {
@@ -60,8 +89,9 @@ function initGameEngine(io, app) {
 
       socket.join(room);
       socket.room = room;
-      socket.role = 'controller';
+      socket.role = isAdmin ? 'admin-controller' : 'controller';
       socket.userId = data.userId || 'guest';
+      socket.isAdmin = isAdmin;
 
       if (!roomPlayers[room]) roomPlayers[room] = {};
 
@@ -76,11 +106,16 @@ function initGameEngine(io, app) {
         angle: 0,
         speed: 0,
         intensity: 0,
-        isDrawing: data.color !== 'transparent' && data.color !== 'eraser',
+        isDrawing: false, // 기본은 선을 남기지 않는 이동 전용 모드
+        trailStyle: 'solid', // 'solid' | 'footprints' | 'dots' | 'spray'
         isErasing: data.color === 'eraser' || !!data.isErasing,
         eraserRadius: data.eraserRadius || 30,
         prevX: null,
-        prevY: null
+        prevY: null,
+        stepDist: 0,
+        footSide: 1,
+        dotDist: 0,
+        sprayDist: 0
       };
       roomPlayers[room][socket.id] = initialPlayer;
 
@@ -104,6 +139,12 @@ function initGameEngine(io, app) {
           p.speed = 0; // 정지
         }
 
+        if (data.isDrawing !== undefined) {
+          p.isDrawing = !!data.isDrawing;
+        }
+        if (data.trailStyle !== undefined) {
+          p.trailStyle = data.trailStyle;
+        }
         if (data.isErasing !== undefined) {
           p.isErasing = !!data.isErasing;
         }
@@ -118,9 +159,6 @@ function initGameEngine(io, app) {
           } else if (data.color === 'transparent') {
             p.isErasing = false;
             p.isDrawing = false;
-          } else {
-            p.isErasing = false;
-            p.isDrawing = true;
           }
         }
         if (data.nickname) p.nickname = data.nickname;
@@ -131,6 +169,10 @@ function initGameEngine(io, app) {
     socket.on('erase-stroke-at', (data) => {
       const room = socket.room;
       if (!room || !db.rooms[room]) return;
+      if (db.rooms[room].isClosed && !socket.isAdmin) {
+        socket.emit('room-session-ended', { room, isClosed: true, reason: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다.' });
+        return;
+      }
       const p = roomPlayers[room]?.[socket.id];
       if (!p) return;
       const ex = p.x + (data.dx || 0);
@@ -155,6 +197,10 @@ function initGameEngine(io, app) {
     socket.on('direct-draw-stroke', (stroke) => {
       const room = socket.room;
       if (room && db.rooms[room]) {
+        if (db.rooms[room].isClosed && !socket.isAdmin) {
+          socket.emit('room-session-ended', { room, isClosed: true, reason: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다.' });
+          return;
+        }
         const p = roomPlayers[room]?.[socket.id];
         const originX = p ? p.x : 2000;
         const originY = p ? p.y : 1500;
@@ -174,6 +220,44 @@ function initGameEngine(io, app) {
         addStroke(room, worldStroke);
         io.to(room).emit('live-stroke-drawn', worldStroke);
       }
+    });
+
+    // ========================================================
+    // 🎨 스탬프 도장 찍기 (내 캔버스에서 완성한 그림을 원하는 위치에 쾅 찍기)
+    // ========================================================
+    socket.on('stamp-place', (data) => {
+      const room = socket.room;
+      if (!room || !db.rooms[room]) return;
+      if (db.rooms[room].isClosed && !socket.isAdmin) {
+        socket.emit('room-session-ended', { room, isClosed: true, reason: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다.' });
+        return;
+      }
+      const p = roomPlayers[room]?.[socket.id];
+      if (!p) return;
+
+      const size = Math.max(60, Math.min(500, parseInt(data.size) || 180));
+      // 타겟 좌표가 명시되어 있으면 그 좌표, 아니면 현재 내 캐릭터 좌표
+      const posX = (data.x !== undefined && data.x !== null) ? data.x : p.x;
+      const posY = (data.y !== undefined && data.y !== null) ? data.y : p.y;
+
+      const stampStroke = {
+        id: makeStrokeId(),
+        type: 'stamp',
+        x: Math.round(posX - size / 2),
+        y: Math.round(posY - size / 2),
+        width: size,
+        height: size,
+        dataUrl: data.dataUrl,
+        authorId: p.userId || 'guest',
+        userId: p.userId || 'guest',
+        nickname: p.nickname || 'Artist',
+        color: p.color || '#00f5d4',
+        createdAt: Date.now()
+      };
+
+      addStroke(room, stampStroke);
+      io.to(room).emit('live-stamp-placed', stampStroke);
+      console.log(`🎨 [Stamp Placed] by [${p.nickname}] in Room [${room}] at (${posX}, ${posY}) size: ${size}px`);
     });
 
     // 7. 연결 종료
@@ -220,7 +304,11 @@ function initGameEngine(io, app) {
             const roomStrokes = db.rooms[room].strokes;
             const removedIds = [];
             db.rooms[room].strokes = roomStrokes.filter(s => {
-              if ((s.authorId === p.userId || s.userId === p.userId) && distToSegment(p.x, p.y, s.x1, s.y1, s.x2, s.y2) <= (radius + (s.width || 8) / 2)) {
+              const sx1 = s.x1 !== undefined ? s.x1 : s.x;
+              const sy1 = s.y1 !== undefined ? s.y1 : s.y;
+              const sx2 = s.x2 !== undefined ? s.x2 : s.x;
+              const sy2 = s.y2 !== undefined ? s.y2 : s.y;
+              if ((s.authorId === p.userId || s.userId === p.userId) && distToSegment(p.x, p.y, sx1, sy1, sx2, sy2) <= (radius + (s.width || s.radius || 8) / 2)) {
                 removedIds.push(s.id);
                 return false;
               }
@@ -231,23 +319,96 @@ function initGameEngine(io, app) {
             }
           }
 
-          // 그리기 모드
+          // 그리기 (자국 남기기) 모드
           if (p.isDrawing && !p.isErasing && p.color !== 'transparent' && p.color !== 'eraser' && p.prevX !== null && p.prevY !== null) {
             const dist = Math.hypot(p.x - p.prevX, p.y - p.prevY);
-            if (dist > 4 && dist < 120 && db.rooms[room]) {
-              const stroke = {
-                id: makeStrokeId(),
-                x1: p.prevX,
-                y1: p.prevY,
-                x2: p.x,
-                y2: p.y,
-                color: p.color,
-                width: 8,
-                authorId: p.userId,
-                userId: p.userId
-              };
-              addStroke(room, stroke);
-              io.to(room).emit('live-stroke-drawn', stroke);
+            if (dist > 2 && dist < 120 && db.rooms[room]) {
+              const currentStyle = p.trailStyle || 'solid';
+
+              if (currentStyle === 'footprints') {
+                // 🐾 발자국 스타일: 26px마다 좌/우 번갈아 찍기
+                p.stepDist = (p.stepDist || 0) + dist;
+                if (p.stepDist >= 26) {
+                  p.footSide = (p.footSide || 1) * -1;
+                  const perpAngle = p.angle + Math.PI / 2;
+                  const fx = Math.round(p.x + Math.cos(perpAngle) * 8 * p.footSide);
+                  const fy = Math.round(p.y + Math.sin(perpAngle) * 8 * p.footSide);
+                  const stroke = {
+                    id: makeStrokeId(),
+                    type: 'trail_footprint',
+                    trailStyle: 'footprints',
+                    x: fx,
+                    y: fy,
+                    angle: p.angle,
+                    color: p.color,
+                    authorId: p.userId,
+                    userId: p.userId,
+                    createdAt: Date.now()
+                  };
+                  addStroke(room, stroke);
+                  io.to(room).emit('live-stroke-drawn', stroke);
+                  p.stepDist = 0;
+                }
+              } else if (currentStyle === 'dots') {
+                // ✨ 네온 점선 스타일: 20px마다 점 찍기
+                p.dotDist = (p.dotDist || 0) + dist;
+                if (p.dotDist >= 20) {
+                  const stroke = {
+                    id: makeStrokeId(),
+                    type: 'trail_dot',
+                    trailStyle: 'dots',
+                    x: Math.round(p.x),
+                    y: Math.round(p.y),
+                    color: p.color,
+                    radius: 6,
+                    authorId: p.userId,
+                    userId: p.userId,
+                    createdAt: Date.now()
+                  };
+                  addStroke(room, stroke);
+                  io.to(room).emit('live-stroke-drawn', stroke);
+                  p.dotDist = 0;
+                }
+              } else if (currentStyle === 'spray') {
+                // 💨 스프레이 분사 스타일: 14px마다 잉크 입자 분사
+                p.sprayDist = (p.sprayDist || 0) + dist;
+                if (p.sprayDist >= 14) {
+                  const stroke = {
+                    id: makeStrokeId(),
+                    type: 'trail_spray',
+                    trailStyle: 'spray',
+                    x: Math.round(p.x),
+                    y: Math.round(p.y),
+                    color: p.color,
+                    authorId: p.userId,
+                    userId: p.userId,
+                    createdAt: Date.now()
+                  };
+                  addStroke(room, stroke);
+                  io.to(room).emit('live-stroke-drawn', stroke);
+                  p.sprayDist = 0;
+                }
+              } else {
+                // 〰️ 기본 네온 실선 (solid)
+                if (dist > 4) {
+                  const stroke = {
+                    id: makeStrokeId(),
+                    type: 'line',
+                    trailStyle: 'solid',
+                    x1: p.prevX,
+                    y1: p.prevY,
+                    x2: p.x,
+                    y2: p.y,
+                    color: p.color,
+                    width: 8,
+                    authorId: p.userId,
+                    userId: p.userId,
+                    createdAt: Date.now()
+                  };
+                  addStroke(room, stroke);
+                  io.to(room).emit('live-stroke-drawn', stroke);
+                }
+              }
             }
           }
           p.prevX = p.x;

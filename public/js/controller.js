@@ -10,6 +10,23 @@
     let currentAuthUser = null;
     let isRoomOwner = false;
 
+    // 🚶 이동 모드 ('move': 이동만 / 'draw': 자국 남기기)
+    let moveMode = 'move';
+    // 🐾 트레일 스타일 ('solid' | 'footprints' | 'dots' | 'spray')
+    let currentTrailStyle = 'solid';
+
+    // 📳 촉각 진동 피드백 (Haptics)
+    function triggerHaptic(type = 'tap') {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try {
+          if (type === 'tap') navigator.vibrate(15);
+          else if (type === 'toggle') navigator.vibrate(28);
+          else if (type === 'stamp') navigator.vibrate([45, 35, 90]);
+          else if (type === 'mode') navigator.vibrate([20, 20]);
+        } catch (e) {}
+      }
+    }
+
     document.getElementById('room-code-tag').innerText = currentRoom;
 
     function joinGameRoom() {
@@ -17,19 +34,95 @@
         room: currentRoom,
         nickname: myNickname,
         color: myColor,
-        userId: currentAuthUser ? currentAuthUser.userId : 'guest'
+        userId: currentAuthUser ? currentAuthUser.userId : 'guest',
+        token: authToken
       });
       checkRoomOwnerStatus();
     }
     socket.on('connect', joinGameRoom);
 
-    // 듀얼 모드 전환
+    // 3단 모드 전환 (조이스틱 / 즉시 낙서 / 스탬프 캔버스)
     function switchMode(mode) {
+      triggerHaptic('tap');
       document.getElementById('tab-joystick').classList.toggle('active', mode === 'joystick');
       document.getElementById('tab-canvas').classList.toggle('active', mode === 'canvas');
+      document.getElementById('tab-stamp').classList.toggle('active', mode === 'stamp');
+
       document.getElementById('joystick-view').style.display = mode === 'joystick' ? 'flex' : 'none';
       document.getElementById('canvas-view').style.display = mode === 'canvas' ? 'block' : 'none';
+      document.getElementById('stamp-view').style.display = mode === 'stamp' ? 'flex' : 'none';
+
       if (mode === 'canvas') resizeTouchCanvas();
+      if (mode === 'stamp') initStampCanvasIfNeeded();
+    }
+
+    // 🚶 이동 모드 vs 🖌️ 자국 남기기(그리기) 모드 토글
+    function setMoveMode(mode) {
+      moveMode = mode;
+      triggerHaptic('toggle');
+
+      const btnMove = document.getElementById('btn-mode-move');
+      const btnDraw = document.getElementById('btn-mode-draw');
+      const trailBar = document.getElementById('trail-style-bar');
+      const statusHint = document.getElementById('joy-status-hint');
+
+      const isDraw = mode === 'draw';
+
+      if (btnMove) {
+        btnMove.style.borderColor = !isDraw ? '#00f5d4' : 'rgba(255,255,255,0.15)';
+        btnMove.style.background = !isDraw ? 'linear-gradient(135deg, rgba(0,245,212,0.25), rgba(0,245,212,0.1))' : 'rgba(255,255,255,0.05)';
+        btnMove.style.color = !isDraw ? '#00f5d4' : '#888';
+      }
+      if (btnDraw) {
+        btnDraw.style.borderColor = isDraw ? '#c084fc' : 'rgba(255,255,255,0.15)';
+        btnDraw.style.background = isDraw ? 'linear-gradient(135deg, rgba(192,132,252,0.25), rgba(192,132,252,0.1))' : 'rgba(255,255,255,0.05)';
+        btnDraw.style.color = isDraw ? '#c084fc' : '#888';
+      }
+
+      if (trailBar) trailBar.style.display = isDraw ? 'block' : 'none';
+      if (statusHint) {
+        statusHint.innerHTML = isDraw
+          ? `🖌️ <span style="color:#c084fc; font-weight:700;">[${getTrailStyleLabel(currentTrailStyle)}]</span> 자국을 남기며 이동 중!`
+          : `🚶 <span style="color:#00f5d4; font-weight:700;">선 없이 자유롭게 이동</span> 중입니다`;
+      }
+
+      socket.emit('player-control', {
+        isDrawing: isDraw,
+        trailStyle: currentTrailStyle
+      });
+
+      showFeedback(isDraw ? `🖌️ 자국 남기기 모드 (${getTrailStyleLabel(currentTrailStyle)})` : '🚶 이동 전용 모드');
+    }
+
+    // 🐾 트레일 스타일 선택 (실선 / 발자국 / 점선 / 스프레이)
+    function setTrailStyle(style) {
+      currentTrailStyle = style;
+      triggerHaptic('tap');
+
+      const styles = ['solid', 'footprints', 'dots', 'spray'];
+      for (const s of styles) {
+        const el = document.getElementById(`btn-trail-${s}`);
+        if (el) el.classList.toggle('active', s === style);
+      }
+
+      const statusHint = document.getElementById('joy-status-hint');
+      if (statusHint && moveMode === 'draw') {
+        statusHint.innerHTML = `🖌️ <span style="color:#c084fc; font-weight:700;">[${getTrailStyleLabel(currentTrailStyle)}]</span> 자국을 남기며 이동 중!`;
+      }
+
+      socket.emit('player-control', {
+        isDrawing: moveMode === 'draw',
+        trailStyle: currentTrailStyle
+      });
+
+      showFeedback(`선택된 스타일: ${getTrailStyleLabel(style)}`);
+    }
+
+    function getTrailStyleLabel(style) {
+      if (style === 'footprints') return '🐾 페인트 발자국';
+      if (style === 'dots') return '✨ 네온 점선';
+      if (style === 'spray') return '💨 스프레이';
+      return '〰️ 네온 실선';
     }
 
     // ==========================================
@@ -60,7 +153,9 @@
         angle: currentAngle,
         intensity: currentIntensity,
         color: myColor,
-        nickname: myNickname
+        nickname: myNickname,
+        isDrawing: moveMode === 'draw',
+        trailStyle: currentTrailStyle
       });
     }
 
@@ -400,6 +495,53 @@
       document.getElementById('session-ended-overlay').style.display = 'flex';
     });
 
+    // 🚨 관리자에 의한 강제 퇴장 (Kick) 처리
+    socket.on('kicked-by-admin', (data) => {
+      stopJoy();
+      socket.disconnect();
+      const reasonEl = document.getElementById('session-ended-reason');
+      if (reasonEl) reasonEl.innerText = data.reason || '관리자에 의해 강제 퇴장(Kick) 처리되었습니다.';
+      const overlay = document.getElementById('session-ended-overlay');
+      if (overlay) overlay.style.display = 'flex';
+      if (typeof triggerHaptic === 'function') triggerHaptic('error');
+    });
+
+    // 📢 관리자 긴급 공지 브로드캐스트 수신
+    socket.on('admin-announcement-broadcast', (data) => {
+      if (!data || !data.message) return;
+      let banner = document.getElementById('admin-broadcast-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'admin-broadcast-banner';
+        banner.style.position = 'fixed';
+        banner.style.top = '12px';
+        banner.style.left = '12px';
+        banner.style.right = '12px';
+        banner.style.zIndex = '99999';
+        banner.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95))';
+        banner.style.color = '#fff';
+        banner.style.padding = '12px 16px';
+        banner.style.borderRadius = '12px';
+        banner.style.boxShadow = '0 6px 24px rgba(239, 68, 68, 0.6)';
+        banner.style.border = '1px solid #fca5a5';
+        banner.style.fontWeight = '700';
+        banner.style.fontSize = '13px';
+        banner.style.textAlign = 'center';
+        banner.style.lineHeight = '1.4';
+        banner.style.transition = 'all 0.3s ease';
+        document.body.appendChild(banner);
+      }
+      banner.innerHTML = `📢 <strong>[관리자 공지]</strong> ${data.message}`;
+      banner.style.display = 'block';
+      banner.style.opacity = '1';
+      if (typeof triggerHaptic === 'function') triggerHaptic('heavy');
+      if (window.adminBannerTimeout) clearTimeout(window.adminBannerTimeout);
+      window.adminBannerTimeout = setTimeout(() => {
+        banner.style.opacity = '0';
+        setTimeout(() => banner.style.display = 'none', 300);
+      }, 9000);
+    });
+
     function showFeedback(text) {
       const el = document.getElementById('bottom-feedback');
       el.innerText = text;
@@ -507,6 +649,8 @@
       document.getElementById('btn-auth-open').style.display = 'inline-block';
       document.getElementById('btn-logout').style.display = 'none';
       document.getElementById('owner-panel').style.display = 'none';
+      const bananaBtn = document.getElementById('btn-admin-banana');
+      if (bananaBtn) bananaBtn.style.display = 'none';
       openAuthModal();
       showFeedback('로그아웃되었습니다.');
     }
@@ -516,6 +660,8 @@
         document.getElementById('user-alias-label').innerText = '미로그인';
         document.getElementById('btn-auth-open').style.display = 'inline-block';
         document.getElementById('btn-logout').style.display = 'none';
+        const bananaBtn = document.getElementById('btn-admin-banana');
+        if (bananaBtn) bananaBtn.style.display = 'none';
         openAuthModal();
         return;
       }
@@ -526,11 +672,20 @@
         const data = await res.json();
         if (data.loggedIn) {
           currentAuthUser = data.user;
+          const isAdmin = currentAuthUser.role === 'admin';
           const isVip = currentAuthUser.role === 'vip';
-          document.getElementById('user-alias-label').innerText = `${currentAuthUser.alias} (${isVip ? 'VIP' : '일반'})`;
-          document.getElementById('user-alias-label').style.color = isVip ? '#00f5d4' : '#f15bb5';
+          const roleTag = isAdmin ? '👑 ADMIN' : (isVip ? 'VIP' : '일반');
+          document.getElementById('user-alias-label').innerText = `${currentAuthUser.alias} (${roleTag})`;
+          document.getElementById('user-alias-label').style.color = isAdmin ? '#fee440' : (isVip ? '#00f5d4' : '#f15bb5');
           document.getElementById('btn-auth-open').style.display = 'none';
           document.getElementById('btn-logout').style.display = 'inline-block';
+
+          // 어드민 전용 나노바나나 버튼 노출 제어
+          const bananaBtn = document.getElementById('btn-admin-banana');
+          if (bananaBtn) {
+            bananaBtn.style.display = isAdmin ? 'inline-block' : 'none';
+          }
+
           loadPreferences();
           document.getElementById('auth-modal').style.display = 'none';
           checkRoomOwnerStatus();
@@ -544,10 +699,11 @@
 
     async function quickAuth(userId) {
       try {
+        const pw = (userId === 'admin') ? 'admin' : '1234';
         const res = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, password: '1234' })
+          body: JSON.stringify({ userId, password: pw })
         });
         const data = await res.json();
         if (res.ok) {
@@ -585,3 +741,697 @@
     }
 
     setTimeout(checkAuthSession, 300);
+
+    // ========================================================
+    // 🎨 나만의 스탬프 캔버스 엔진 (자유 브러시 & 픽셀 도트 듀얼 지원)
+    // ========================================================
+    const bCanvas = document.getElementById('battle-canvas');
+    const bCtx = bCanvas ? bCanvas.getContext('2d', { willReadFrequently: true }) : null;
+
+    let drawingStyle = 'smooth';      // 'smooth' | 'pixel'
+    let battleTool = 'pen';           // 'pen' | 'bucket' | 'eraser'
+    let brushThickness = 10;
+    let pixelGridSize = 24;           // 16 | 24 | 32
+    let showPixelGrid = true;
+    let stampBgMode = 'transparent';  // 'transparent' | 'dark'
+    let stampPlaceSize = 180;         // 100 | 180 | 280
+    let isDrawingBattle = false;
+    let lastBattlePoint = null;
+    let stampCanvasInitialized = false;
+
+    // 픽셀 모드용 2차원 데이터: pixelGrid[row][col] = hexColor or null
+    let pixelGrid = [];
+    function initPixelGrid(size) {
+      pixelGridSize = size;
+      pixelGrid = [];
+      for (let r = 0; r < size; r++) {
+        pixelGrid.push(new Array(size).fill(null));
+      }
+    }
+    initPixelGrid(24);
+
+    // 실행 취소(Undo) 스택
+    const battleUndoStack = [];
+    const MAX_UNDO = 15;
+
+    function saveBattleUndo() {
+      if (drawingStyle === 'smooth') {
+        if (battleUndoStack.length >= MAX_UNDO) battleUndoStack.shift();
+        battleUndoStack.push({
+          style: 'smooth',
+          imageData: bCtx.getImageData(0, 0, bCanvas.width, bCanvas.height)
+        });
+      } else {
+        if (battleUndoStack.length >= MAX_UNDO) battleUndoStack.shift();
+        const clone = pixelGrid.map(row => [...row]);
+        battleUndoStack.push({
+          style: 'pixel',
+          grid: clone
+        });
+      }
+    }
+
+    function undoBattle() {
+      if (battleUndoStack.length === 0) {
+        showFeedback('⚠️ 되돌릴 작업이 없습니다.');
+        return;
+      }
+      const prev = battleUndoStack.pop();
+      if (prev.style === 'smooth') {
+        bCtx.putImageData(prev.imageData, 0, 0);
+      } else {
+        pixelGrid = prev.grid.map(row => [...row]);
+        renderPixelCanvas();
+      }
+      showFeedback('↩️ 실행 취소 완료');
+    }
+
+    function clearBattleCanvas() {
+      if (!confirm('캔버스를 모두 지우시겠습니까?')) return;
+      saveBattleUndo();
+      if (drawingStyle === 'smooth') {
+        if (stampBgMode === 'dark') {
+          bCtx.fillStyle = '#141726';
+          bCtx.fillRect(0, 0, bCanvas.width, bCanvas.height);
+        } else {
+          bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+        }
+      } else {
+        initPixelGrid(pixelGridSize);
+        renderPixelCanvas();
+      }
+      showFeedback('🗑️ 캔버스가 초기화되었습니다.');
+    }
+
+    function initStampCanvasIfNeeded() {
+      if (stampCanvasInitialized || !bCanvas) return;
+      stampCanvasInitialized = true;
+
+      // 캔버스 기본 배경 초기화 (투명)
+      bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+
+      // 포인터 이벤트 등록
+      bCanvas.addEventListener('pointerdown', onBattlePointerDown);
+      bCanvas.addEventListener('pointermove', onBattlePointerMove);
+      bCanvas.addEventListener('pointerup', onBattlePointerUp);
+      bCanvas.addEventListener('pointercancel', onBattlePointerUp);
+    }
+
+    // 1. 드로잉 스타일 전환 (자유 브러시 vs 픽셀 아트)
+    function setDrawingStyle(style) {
+      if (drawingStyle === style) return;
+      drawingStyle = style;
+
+      document.getElementById('btn-style-smooth').classList.toggle('active', style === 'smooth');
+      document.getElementById('btn-style-pixel').classList.toggle('active', style === 'pixel');
+      document.getElementById('brush-options-bar').style.display = style === 'smooth' ? 'flex' : 'none';
+      document.getElementById('pixel-options-bar').style.display = style === 'pixel' ? 'flex' : 'none';
+      bCanvas.classList.toggle('pixel-mode', style === 'pixel');
+
+      battleUndoStack.length = 0;
+
+      if (style === 'pixel') {
+        renderPixelCanvas();
+        showFeedback('👾 픽셀 아트 모드 (도트 격자)');
+      } else {
+        showFeedback('🖌️ 자유 브러시 모드');
+      }
+    }
+
+    // 2. 도구 선택 (펜, 채우기, 지우개)
+    function setBattleTool(tool) {
+      battleTool = tool;
+      document.getElementById('tool-pen').classList.toggle('active', tool === 'pen');
+      document.getElementById('tool-bucket').classList.toggle('active', tool === 'bucket');
+      document.getElementById('tool-eraser').classList.toggle('active', tool === 'eraser');
+
+      if (tool === 'pen') showFeedback('✏️ 펜 모드');
+      else if (tool === 'bucket') showFeedback('🪣 영역 채우기(페인트통) 모드');
+      else if (tool === 'eraser') showFeedback('🧽 지우개 모드');
+    }
+
+    // 3. 브러시 굵기 설정
+    function setBrushThickness(thick) {
+      brushThickness = thick;
+      document.getElementById('btn-thick-3').classList.toggle('active', thick === 4);
+      document.getElementById('btn-thick-8').classList.toggle('active', thick === 10);
+      document.getElementById('btn-thick-18').classList.toggle('active', thick === 22);
+      showFeedback(`🖌️ 브러시 굵기: ${thick}px`);
+    }
+
+    // 4. 픽셀 그리드 크기 설정
+    function setPixelGridSize(size) {
+      saveBattleUndo();
+      initPixelGrid(size);
+      document.getElementById('btn-grid-16').classList.toggle('active', size === 16);
+      document.getElementById('btn-grid-24').classList.toggle('active', size === 24);
+      document.getElementById('btn-grid-32').classList.toggle('active', size === 32);
+      renderPixelCanvas();
+      showFeedback(`👾 해상도: ${size}×${size}`);
+    }
+
+    function togglePixelGrid() {
+      showPixelGrid = !showPixelGrid;
+      document.getElementById('btn-toggle-grid').innerText = showPixelGrid ? '격자 ON' : '격자 OFF';
+      document.getElementById('btn-toggle-grid').classList.toggle('active', showPixelGrid);
+      renderPixelCanvas();
+    }
+
+    // 5. 스탬프 배경 투명/불투명 토글
+    function setStampBgMode(mode) {
+      stampBgMode = mode;
+      document.getElementById('btn-bg-transparent').classList.toggle('active', mode === 'transparent');
+      document.getElementById('btn-bg-dark').classList.toggle('active', mode === 'dark');
+
+      const frame = document.getElementById('stamp-canvas-frame');
+      if (mode === 'transparent') {
+        frame.style.background = 'radial-gradient(circle at center, #1b2038 0%, #0e111e 100%)';
+        showFeedback('✨ 투명 스티커 모드 (그린 부분만 찍힙니다)');
+      } else {
+        frame.style.background = '#141726';
+        showFeedback('⬛ 어두운 배경 모드');
+      }
+      if (drawingStyle === 'pixel') renderPixelCanvas();
+    }
+
+    // 6. 도장 찍기 크기 설정 (100 / 180 / 280)
+    function setStampPlaceSize(size) {
+      stampPlaceSize = size;
+      document.getElementById('btn-stamp-size-100').classList.toggle('active', size === 100);
+      document.getElementById('btn-stamp-size-180').classList.toggle('active', size === 180);
+      document.getElementById('btn-stamp-size-280').classList.toggle('active', size === 280);
+      showFeedback(`📏 도장 크기: ${size}px`);
+    }
+
+    // ==========================================
+    // 픽셀 캔버스 렌더러
+    // ==========================================
+    function renderPixelCanvas() {
+      if (!bCtx) return;
+      const w = bCanvas.width;
+      const h = bCanvas.height;
+      const cellSize = w / pixelGridSize;
+
+      if (stampBgMode === 'dark') {
+        bCtx.fillStyle = '#141726';
+        bCtx.fillRect(0, 0, w, h);
+      } else {
+        bCtx.clearRect(0, 0, w, h);
+      }
+
+      // 셀 컬러 칠하기
+      for (let r = 0; r < pixelGridSize; r++) {
+        for (let c = 0; c < pixelGridSize; c++) {
+          const col = pixelGrid[r][c];
+          if (col) {
+            bCtx.fillStyle = col;
+            bCtx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+          }
+        }
+      }
+
+      // 격자선 렌더링
+      if (showPixelGrid) {
+        bCtx.save();
+        bCtx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        bCtx.lineWidth = 1;
+        bCtx.beginPath();
+        for (let i = 0; i <= pixelGridSize; i++) {
+          const pos = i * cellSize;
+          bCtx.moveTo(pos, 0);
+          bCtx.lineTo(pos, h);
+          bCtx.moveTo(0, pos);
+          bCtx.lineTo(w, pos);
+        }
+        bCtx.stroke();
+        bCtx.restore();
+      }
+    }
+
+    // ==========================================
+    // 포인터 터치/마우스 핸들러
+    // ==========================================
+    function getBattleCanvasPoint(e) {
+      const rect = bCanvas.getBoundingClientRect();
+      const scaleX = bCanvas.width / rect.width;
+      const scaleY = bCanvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    function onBattlePointerDown(e) {
+      e.preventDefault();
+      bCanvas.setPointerCapture(e.pointerId);
+      isDrawingBattle = true;
+      saveBattleUndo();
+
+      const pt = getBattleCanvasPoint(e);
+      lastBattlePoint = pt;
+
+      const activeColor = (battleTool === 'eraser') ? null : (myColor === 'eraser' || myColor === 'transparent' ? '#00f5d4' : myColor);
+
+      if (drawingStyle === 'pixel') {
+        const cellSize = bCanvas.width / pixelGridSize;
+        const c = Math.floor(pt.x / cellSize);
+        const r = Math.floor(pt.y / cellSize);
+
+        if (c >= 0 && c < pixelGridSize && r >= 0 && r < pixelGridSize) {
+          if (battleTool === 'bucket') {
+            floodFillPixel(c, r, pixelGrid[r][c], activeColor);
+          } else {
+            pixelGrid[r][c] = activeColor;
+          }
+          renderPixelCanvas();
+        }
+      } else {
+        // 자유 브러시 모드
+        if (battleTool === 'bucket') {
+          floodFillSmooth(Math.round(pt.x), Math.round(pt.y), activeColor || '#00f5d4');
+        } else {
+          bCtx.save();
+          if (battleTool === 'eraser') {
+            bCtx.globalCompositeOperation = 'destination-out';
+            bCtx.fillStyle = 'rgba(0,0,0,1)';
+          } else {
+            bCtx.globalCompositeOperation = 'source-over';
+            bCtx.fillStyle = activeColor || '#00f5d4';
+          }
+          bCtx.beginPath();
+          bCtx.arc(pt.x, pt.y, brushThickness / 2, 0, Math.PI * 2);
+          bCtx.fill();
+          bCtx.restore();
+        }
+      }
+    }
+
+    function onBattlePointerMove(e) {
+      if (!isDrawingBattle) return;
+      e.preventDefault();
+      const pt = getBattleCanvasPoint(e);
+      const activeColor = (battleTool === 'eraser') ? null : (myColor === 'eraser' || myColor === 'transparent' ? '#00f5d4' : myColor);
+
+      if (drawingStyle === 'pixel') {
+        const cellSize = bCanvas.width / pixelGridSize;
+        const c = Math.floor(pt.x / cellSize);
+        const r = Math.floor(pt.y / cellSize);
+
+        if (c >= 0 && c < pixelGridSize && r >= 0 && r < pixelGridSize && battleTool !== 'bucket') {
+          if (pixelGrid[r][c] !== activeColor) {
+            pixelGrid[r][c] = activeColor;
+            renderPixelCanvas();
+          }
+        }
+      } else {
+        if (battleTool !== 'bucket' && lastBattlePoint) {
+          bCtx.save();
+          bCtx.lineCap = 'round';
+          bCtx.lineJoin = 'round';
+          bCtx.lineWidth = brushThickness;
+          if (battleTool === 'eraser') {
+            bCtx.globalCompositeOperation = 'destination-out';
+            bCtx.strokeStyle = 'rgba(0,0,0,1)';
+          } else {
+            bCtx.globalCompositeOperation = 'source-over';
+            bCtx.strokeStyle = activeColor || '#00f5d4';
+          }
+          bCtx.beginPath();
+          bCtx.moveTo(lastBattlePoint.x, lastBattlePoint.y);
+          bCtx.lineTo(pt.x, pt.y);
+          bCtx.stroke();
+          bCtx.restore();
+        }
+      }
+      lastBattlePoint = pt;
+    }
+
+    function onBattlePointerUp(e) {
+      if (!isDrawingBattle) return;
+      isDrawingBattle = false;
+      lastBattlePoint = null;
+    }
+
+    // ==========================================
+    // 🪣 영역 채우기 (Flood Fill)
+    // ==========================================
+    function floodFillPixel(startCol, startRow, targetColor, fillColor) {
+      if (targetColor === fillColor) return;
+      const q = [[startCol, startRow]];
+      const visited = Array.from({ length: pixelGridSize }, () => Array(pixelGridSize).fill(false));
+      visited[startRow][startCol] = true;
+
+      while (q.length > 0) {
+        const [c, r] = q.shift();
+        pixelGrid[r][c] = fillColor;
+
+        const dirs = [[0, 1], [0, -1], [1, 0], [-1, 0]];
+        for (const [dc, dr] of dirs) {
+          const nc = c + dc;
+          const nr = r + dr;
+          if (nc >= 0 && nc < pixelGridSize && nr >= 0 && nr < pixelGridSize) {
+            if (!visited[nr][nc] && pixelGrid[nr][nc] === targetColor) {
+              visited[nr][nc] = true;
+              q.push([nc, nr]);
+            }
+          }
+        }
+      }
+    }
+
+    function floodFillSmooth(startX, startY, fillHex) {
+      const w = bCanvas.width;
+      const h = bCanvas.height;
+      const imgData = bCtx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+
+      const fillRgb = hexToRgb(fillHex);
+      const startIdx = (startY * w + startX) * 4;
+      const targetR = data[startIdx];
+      const targetG = data[startIdx + 1];
+      const targetB = data[startIdx + 2];
+      const targetA = data[startIdx + 3];
+
+      if (targetR === fillRgb.r && targetG === fillRgb.g && targetB === fillRgb.b && targetA === 255) return;
+
+      const match = (idx) => {
+        return Math.abs(data[idx] - targetR) < 28 &&
+               Math.abs(data[idx + 1] - targetG) < 28 &&
+               Math.abs(data[idx + 2] - targetB) < 28 &&
+               Math.abs(data[idx + 3] - targetA) < 28;
+      };
+
+      const pixelStack = [[startX, startY]];
+      const visited = new Uint8Array(w * h);
+
+      while (pixelStack.length > 0) {
+        const [x, y] = pixelStack.pop();
+        let curY = y;
+        let idx = (curY * w + x) * 4;
+
+        while (curY >= 0 && match(idx) && !visited[curY * w + x]) {
+          curY--;
+          idx -= w * 4;
+        }
+        curY++;
+        idx += w * 4;
+
+        let reachLeft = false;
+        let reachRight = false;
+
+        while (curY < h && match(idx) && !visited[curY * w + x]) {
+          visited[curY * w + x] = 1;
+          data[idx] = fillRgb.r;
+          data[idx + 1] = fillRgb.g;
+          data[idx + 2] = fillRgb.b;
+          data[idx + 3] = 255;
+
+          if (x > 0) {
+            if (match(idx - 4) && !visited[curY * w + (x - 1)]) {
+              if (!reachLeft) {
+                pixelStack.push([x - 1, curY]);
+                reachLeft = true;
+              }
+            } else if (reachLeft) reachLeft = false;
+          }
+
+          if (x < w - 1) {
+            if (match(idx + 4) && !visited[curY * w + (x + 1)]) {
+              if (!reachRight) {
+                pixelStack.push([x + 1, curY]);
+                reachRight = true;
+              }
+            } else if (reachRight) reachRight = false;
+          }
+
+          curY++;
+          idx += w * 4;
+        }
+      }
+      bCtx.putImageData(imgData, 0, 0);
+    }
+
+    function hexToRgb(hex) {
+      let c = hex.replace('#', '');
+      if (c.length === 3) c = c.split('').map(x => x + x).join('');
+      const num = parseInt(c, 16);
+      return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+
+    // ==========================================
+    // 🎯 스탬프 도장 추출 및 대형 화면에 쾅 찍기!
+    // ==========================================
+    function getExportStampDataUrl() {
+      if (!bCanvas) return null;
+
+      // 1. 픽셀 모드일 때는 격자선을 제외한 순수 아트만 렌더링
+      if (drawingStyle === 'pixel') {
+        let hasPixels = false;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = bCanvas.width;
+        tempCanvas.height = bCanvas.height;
+        const tCtx = tempCanvas.getContext('2d');
+        const cellSize = tempCanvas.width / pixelGridSize;
+
+        if (stampBgMode === 'dark') {
+          tCtx.fillStyle = '#141726';
+          tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        } else {
+          tCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+        }
+
+        for (let r = 0; r < pixelGridSize; r++) {
+          for (let c = 0; c < pixelGridSize; c++) {
+            const col = pixelGrid[r][c];
+            if (col) {
+              hasPixels = true;
+              tCtx.fillStyle = col;
+              tCtx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+            }
+          }
+        }
+        if (!hasPixels && stampBgMode !== 'dark') return null;
+        return tempCanvas.toDataURL('image/png');
+      }
+
+      // 2. 자유 브러시 모드
+      if (stampBgMode === 'dark') {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = bCanvas.width;
+        tempCanvas.height = bCanvas.height;
+        const tCtx = tempCanvas.getContext('2d');
+        tCtx.fillStyle = '#141726';
+        tCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        tCtx.drawImage(bCanvas, 0, 0);
+        return tempCanvas.toDataURL('image/png');
+      }
+
+      return bCanvas.toDataURL('image/png');
+    }
+
+    // 🎯 도장 찍기 실행! (스플래시나 잡음 없이 그린 그림 그대로 캔버스에 각인)
+    function placeStampOnCanvas() {
+      const dataUrl = getExportStampDataUrl();
+      if (!dataUrl) {
+        showFeedback('⚠️ 먼저 캔버스에 그림을 그려주세요!');
+        return;
+      }
+
+      triggerHaptic('stamp');
+
+      socket.emit('stamp-place', {
+        size: stampPlaceSize,
+        dataUrl: dataUrl
+      });
+
+      showFeedback(`🎯 ${stampPlaceSize}px 도장을 쾅 찍었습니다!`);
+
+      // 버튼 애니메이션 피드백
+      const btn = document.getElementById('btn-place-stamp');
+      if (btn) {
+        btn.style.transform = 'scale(0.92)';
+        setTimeout(() => {
+          btn.style.transform = 'scale(1)';
+        }, 150);
+      }
+    }
+
+    // ==========================================
+    // ⚡ 고도화 AI 스탬프 자동 생성 (고화질 SVG 벡터 스티커 & 정밀 픽셀 아트)
+    // ==========================================
+    async function promptAiStamp() {
+      const defaultTheme = drawingStyle === 'pixel' ? '황금 왕관' : '사이버펑크 네온 고양이';
+      const promptText = prompt(`✨ AI에게 그릴 [${drawingStyle === 'pixel' ? '픽셀 아트' : '벡터 스티커'}] 주제를 입력하세요:`, defaultTheme);
+      if (!promptText || !promptText.trim()) return;
+
+      showFeedback(`🤖 스마트 AI [${drawingStyle === 'pixel' ? '픽셀' : '벡터'}] 스탬프 생성 중...`);
+
+      try {
+        const res = await fetch('/api/ai/generate-stamp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+          },
+          body: JSON.stringify({
+            prompt: promptText.trim(),
+            style: drawingStyle,
+            gridSize: pixelGridSize
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || '생성 실패');
+        }
+
+        const data = await res.json();
+        saveBattleUndo(); // 이전 작업 취소(Undo) 가능하도록 백업
+
+        // 1. 고화질 2D 그래픽 SVG 스티커 반환 시 (벡터 모드)
+        if (data.isImage && data.dataUrl) {
+          const img = new Image();
+          img.onload = () => {
+            setDrawingStyle('smooth');
+            bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+            if (stampBgMode === 'dark') {
+              bCtx.fillStyle = '#141726';
+              bCtx.fillRect(0, 0, bCanvas.width, bCanvas.height);
+            }
+            bCtx.drawImage(img, 0, 0, bCanvas.width, bCanvas.height);
+            showFeedback(`✨ "${promptText.trim()}" 고화질 2D 벡터 스티커 완성!`);
+          };
+          img.src = data.dataUrl;
+          return;
+        }
+
+        // 2. 대칭 보정 픽셀 아트 (픽셀 모드: 16x16, 24x24, 32x32)
+        if (data.style === 'pixel' && data.lines) {
+          const targetGridSize = data.gridSize || pixelGridSize || 16;
+          setPixelGridSize(targetGridSize);
+          const pal = data.palette || {};
+          for (let r = 0; r < targetGridSize; r++) {
+            const line = data.lines[r] || '';
+            for (let c = 0; c < targetGridSize; c++) {
+              const char = line[c] || '.';
+              pixelGrid[r][c] = pal[char] || null;
+            }
+          }
+          renderPixelCanvas();
+          showFeedback(`✨ "${promptText.trim()}" 정밀 픽셀 아트 (${targetGridSize}×${targetGridSize}) 완성!`);
+          return;
+        }
+
+        // 3. 폴백 벡터 좌표
+        if (data.style === 'smooth' && data.points) {
+          if (stampBgMode === 'dark') {
+            bCtx.fillStyle = '#141726';
+            bCtx.fillRect(0, 0, bCanvas.width, bCanvas.height);
+          } else {
+            bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+          }
+
+          const pts = data.points;
+          if (pts.length > 0) {
+            bCtx.save();
+            bCtx.lineCap = 'round';
+            bCtx.lineJoin = 'round';
+            bCtx.lineWidth = 10;
+            bCtx.strokeStyle = data.color || (myColor !== 'eraser' && myColor !== 'transparent' ? myColor : '#00f5d4');
+            bCtx.beginPath();
+            bCtx.moveTo(pts[0].x, pts[0].y);
+            for (let i = 1; i < pts.length; i++) {
+              bCtx.lineTo(pts[i].x, pts[i].y);
+            }
+            bCtx.stroke();
+            bCtx.restore();
+          }
+          showFeedback(`✨ "${promptText.trim()}" 스케치 완성!`);
+        }
+      } catch (e) {
+        console.error(e);
+        showFeedback(`⚠️ 생성 오류: ${e.message}`);
+      }
+    }
+
+    // ==========================================
+    // 🍌 [Admin 전용] 나노바나나 (Nano Banana) 고화질 스탬프 실험실
+    // ==========================================
+    async function promptNanoBananaStamp() {
+      if (!currentAuthUser || currentAuthUser.role !== 'admin') {
+        alert('🍌 나노바나나 모델 실험실은 오직 최고 관리자(Admin)만 이용할 수 있습니다.');
+        return;
+      }
+
+      const promptText = prompt('🍌 [Admin 전용] 나노바나나 고화질 이미지 스탬프를 생성할 주제를 입력하세요:', '사이버펑크 네온 호랑이 스티커');
+      if (!promptText || !promptText.trim()) return;
+
+      showFeedback('🍌 나노바나나(Nano Banana) AI 스튜디오 생성 중... (약 2~4초 소요)');
+
+      try {
+        const res = await fetch('/api/ai/generate-stamp', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            prompt: promptText.trim(),
+            style: drawingStyle,
+            modelTier: 'nano-banana'
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || '생성 실패');
+        }
+
+        const data = await res.json();
+        saveBattleUndo();
+
+        // 1. 실제 나노바나나 이미지 (PNG Base64) 반환된 경우
+        if (data.isImage && data.dataUrl) {
+          const img = new Image();
+          img.onload = () => {
+            // 자유 브러시 모드로 자동 전환하여 고화질 원본 블릿
+            setDrawingStyle('smooth');
+            bCtx.clearRect(0, 0, bCanvas.width, bCanvas.height);
+            if (stampBgMode === 'dark') {
+              bCtx.fillStyle = '#141726';
+              bCtx.fillRect(0, 0, bCanvas.width, bCanvas.height);
+            }
+            bCtx.drawImage(img, 0, 0, bCanvas.width, bCanvas.height);
+            showFeedback(`🍌 "${promptText.trim()}" 나노바나나 고화질 스탬프 로드 완료! (${data.modelUsed})`);
+          };
+          img.src = data.dataUrl;
+          return;
+        }
+
+        // 2. 32x32 HD 픽셀 도트 매트릭스로 생성된 경우
+        if (data.style === 'pixel' && data.lines) {
+          const targetGridSize = data.gridSize || 32;
+          setPixelGridSize(targetGridSize);
+          const pal = data.palette || {};
+          for (let r = 0; r < targetGridSize; r++) {
+            const line = data.lines[r] || '';
+            for (let c = 0; c < targetGridSize; c++) {
+              const char = line[c] || '.';
+              pixelGrid[r][c] = pal[char] || null;
+            }
+          }
+          renderPixelCanvas();
+          if (data.notice) {
+            alert(data.notice);
+          }
+          showFeedback(`✨ "${promptText.trim()}" HD 픽셀 스탬프 로드 완료! (${data.modelUsed})`);
+          return;
+        }
+
+        showFeedback(`✨ "${promptText.trim()}" 스탬프가 캔버스에 로드되었습니다.`);
+      } catch (err) {
+        console.error('nano-banana error:', err);
+        alert('나노바나나 생성 실패: ' + err.message);
+        showFeedback('❌ 나노바나나 스탬프 생성에 실패했습니다.');
+      }
+    }

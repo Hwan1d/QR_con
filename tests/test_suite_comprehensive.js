@@ -7,7 +7,8 @@ const serverProcess = require('../server.js');
 async function runTests() {
   console.log('🧪 [테스트] 종합 기능 및 권한(RLS) 검증 시작...\n');
 
-  const BASE_URL = 'http://localhost:3000';
+  const PORT = process.env.PORT || 3000;
+  const BASE_URL = `http://localhost:${PORT}`;
 
   // Helper fetch
   async function request(endpoint, options = {}) {
@@ -146,5 +147,5 @@ async function runTests() {
   process.exit(0);
 }
 
-// 500ms 후 실행 (서버 바인딩 대기)
-setTimeout(runTests, 800);
+// Supabase 동기화 완료 대기 후 실행
+setTimeout(runTests, 2500);

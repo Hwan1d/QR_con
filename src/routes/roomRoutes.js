@@ -35,7 +35,8 @@ router.get('/rooms', (req, res) => {
     title: r.title,
     owner: r.owner,
     isSecret: !!r.isSecret,
-    strokeCount: r.strokes.length,
+    isClosed: !!r.isClosed,
+    strokeCount: r.strokes ? r.strokes.length : 0,
     createdAt: r.createdAt
   }));
   res.json(list);
@@ -46,12 +47,20 @@ router.get('/rooms/:roomCode', (req, res) => {
   const code = (req.params.roomCode || '').toUpperCase();
   const room = db.rooms[code];
   if (!room) return res.status(404).json({ error: '방을 찾을 수 없습니다.' });
+
+  // 관리자가 닫은 방은 일반 유저 접근 금지
+  const user = getSessionUser(req);
+  if (room.isClosed && (!user || user.role !== 'admin')) {
+    return res.status(403).json({ error: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다. 일반 유저는 접근할 수 없습니다.', isClosed: true });
+  }
+
   res.json({
     code: room.code,
     title: room.title,
     owner: room.owner,
     isSecret: !!room.isSecret,
-    strokeCount: room.strokes.length,
+    isClosed: !!room.isClosed,
+    strokeCount: room.strokes ? room.strokes.length : 0,
     createdAt: room.createdAt
   });
 });
@@ -63,12 +72,19 @@ router.post('/rooms/verify-entry', (req, res) => {
   const room = db.rooms[code];
 
   if (!room) return res.status(404).json({ error: '존재하지 않는 방입니다.' });
+
+  // 관리자가 닫은 방은 일반 유저 입장 차단
+  const user = getSessionUser(req);
+  if (room.isClosed && (!user || user.role !== 'admin')) {
+    return res.status(403).json({ error: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다. 일반 유저는 입장할 수 없습니다.' });
+  }
+
   if (room.isSecret) {
     if (!secretCode || (hashPw(secretCode) !== room.secretCodeHash && secretCode !== room.secretCode)) {
       return res.status(403).json({ error: '비밀방 코드가 일치하지 않습니다.' });
     }
   }
-  res.json({ ok: true, room: { code: room.code, title: room.title, owner: room.owner } });
+  res.json({ ok: true, room: { code: room.code, title: room.title, owner: room.owner, isClosed: !!room.isClosed } });
 });
 
 // 5. 방 생성

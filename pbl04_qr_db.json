@@ -49,13 +49,6 @@
       "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
       "role": "user"
     },
-    "admin": {
-      "userId": "admin",
-      "alias": "시스템 관리자 (Admin)",
-      "password": "admin1234",
-      "passwordHash": "ac9689e2272427085e35b9d3e3e8bed88cb3434828b43b86fc0596cad4c6e270",
-      "role": "admin"
-    },
     "test": {
       "userId": "test",
       "alias": "test",
@@ -76,6 +69,20 @@
       "password": "1234",
       "passwordHash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
       "role": "user"
+    },
+    "admin": {
+      "userId": "admin",
+      "alias": "슈퍼 관리자 (Admin)",
+      "password": "admin",
+      "passwordHash": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
+      "role": "admin"
+    },
+    "test_user_adm": {
+      "userId": "test_user_adm",
+      "alias": "테스터",
+      "password": "password123",
+      "passwordHash": "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f",
+      "role": "vip"
     }
   },
   "preferences": {
@@ -105,8 +112,15 @@
     },
     "admin": {
       "color": "#fee440",
-      "nickname": "Admin",
-      "brushSize": 12
+      "nickname": "슈퍼 관리자 (Admin)",
+      "brushSize": 12,
+      "updatedAt": "2026-11-23T01:41:13.458Z"
+    },
+    "test_user_adm": {
+      "color": "#00f5d4",
+      "nickname": "테스터",
+      "brushSize": 10,
+      "updatedAt": "2026-11-23T03:44:26.458Z"
     }
   },
   "permissions": {
@@ -10230,7 +10244,296 @@
       "code": "LOBBY",
       "title": "열린 광장 캔버스 (LOBBY)",
       "owner": "user_a",
-      "strokes": [],
+      "strokes": [
+        {
+          "id": "s_1795144734620_vuci8v",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2084,
+          "y1": 1770,
+          "x2": 2087,
+          "y2": 1773
+        },
+        {
+          "id": "s_1795144734644_h4xw7f",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2087,
+          "y1": 1773,
+          "x2": 2092,
+          "y2": 1776
+        },
+        {
+          "id": "s_1795144734695_sgrq0t",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2096,
+          "y1": 1779,
+          "x2": 2102,
+          "y2": 1783
+        },
+        {
+          "id": "s_1795144734670_uzabi3",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2092,
+          "y1": 1776,
+          "x2": 2096,
+          "y2": 1779
+        },
+        {
+          "id": "s_1795144734790_4tk5em",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2107,
+          "y1": 1787,
+          "x2": 2112,
+          "y2": 1790
+        },
+        {
+          "id": "s_1795144734815_7mfsg5",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2112,
+          "y1": 1790,
+          "x2": 2118,
+          "y2": 1794
+        },
+        {
+          "id": "s_1795144734841_2zzen5",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2118,
+          "y1": 1794,
+          "x2": 2123,
+          "y2": 1798
+        },
+        {
+          "id": "s_1795144734866_m81aze",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2123,
+          "y1": 1798,
+          "x2": 2128,
+          "y2": 1802
+        },
+        {
+          "id": "s_1795144734891_dfroaz",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2128,
+          "y1": 1802,
+          "x2": 2134,
+          "y2": 1805
+        },
+        {
+          "id": "s_1795144734916_4pzfn9",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2134,
+          "y1": 1805,
+          "x2": 2139,
+          "y2": 1809
+        },
+        {
+          "id": "s_1795144734941_jxnmep",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2139,
+          "y1": 1809,
+          "x2": 2145,
+          "y2": 1813
+        },
+        {
+          "id": "s_1795144734720_e0dyda",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2102,
+          "y1": 1783,
+          "x2": 2107,
+          "y2": 1787
+        },
+        {
+          "id": "s_1795144734966_9mc5ms",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2145,
+          "y1": 1813,
+          "x2": 2150,
+          "y2": 1817
+        },
+        {
+          "id": "s_1795144734991_gsw6c8",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2150,
+          "y1": 1817,
+          "x2": 2155,
+          "y2": 1821
+        },
+        {
+          "id": "s_1795144735016_lsy1ib",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2155,
+          "y1": 1821,
+          "x2": 2161,
+          "y2": 1824
+        },
+        {
+          "id": "s_1795144735041_ogj9cr",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2161,
+          "y1": 1824,
+          "x2": 2166,
+          "y2": 1828
+        },
+        {
+          "id": "s_1795144735066_rlf8i6",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2166,
+          "y1": 1828,
+          "x2": 2170,
+          "y2": 1832
+        },
+        {
+          "id": "s_1795144735997_sxyolf",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2132,
+          "y1": 1898,
+          "x2": 2127,
+          "y2": 1899
+        },
+        {
+          "id": "s_1795144736022_yokvvu",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2127,
+          "y1": 1899,
+          "x2": 2122,
+          "y2": 1900
+        },
+        {
+          "id": "s_1795144736047_gigp7e",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2122,
+          "y1": 1900,
+          "x2": 2117,
+          "y2": 1900
+        },
+        {
+          "id": "s_1795144736072_f9xq8u",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2117,
+          "y1": 1900,
+          "x2": 2112,
+          "y2": 1900
+        },
+        {
+          "id": "s_1795144736097_5qg005",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2112,
+          "y1": 1900,
+          "x2": 2107,
+          "y2": 1901
+        },
+        {
+          "id": "s_1795144736122_2zrzlr",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2107,
+          "y1": 1901,
+          "x2": 2102,
+          "y2": 1901
+        },
+        {
+          "id": "s_1795144736148_hv903x",
+          "room": "LOBBY",
+          "userId": "12",
+          "authorId": "12",
+          "color": "#00f5d4",
+          "width": 8,
+          "x1": 2102,
+          "y1": 1901,
+          "x2": 2096,
+          "y2": 1902
+        }
+      ],
       "splats": [
         {
           "x": 2911.4368517652556,
@@ -12139,7 +12442,8 @@
       "isSecret": false,
       "secretCodeHash": null,
       "strokes": [],
-      "createdAt": "2026-11-20T02:16:44.807Z"
+      "createdAt": "2026-11-20T02:16:44.807Z",
+      "isClosed": true
     },
     "ROOM-B-MWOCMGKO": {
       "code": "ROOM-B-MWOCMGKO",
@@ -12158,7 +12462,8 @@
       "secretCodeHash": null,
       "secretCode": null,
       "strokes": [],
-      "createdAt": "2026-11-20T04:20:07.539Z"
+      "createdAt": "2026-11-20T04:20:07.539Z",
+      "isClosed": true
     },
     "ROOM-B-MWOHEBW4": {
       "code": "ROOM-B-MWOHEBW4",
@@ -12168,7 +12473,40 @@
       "secretCodeHash": null,
       "secretCode": null,
       "strokes": [],
-      "createdAt": "2026-11-20T04:30:55.156Z"
+      "createdAt": "2026-11-20T04:30:55.156Z",
+      "isClosed": true
+    },
+    "TEST_ADM_ROOM": {
+      "code": "TEST_ADM_ROOM",
+      "title": "관리자 테스트 캔버스",
+      "owner": "admin",
+      "isSecret": false,
+      "secretCodeHash": null,
+      "secretCode": null,
+      "strokes": [],
+      "createdAt": "2026-11-23T03:46:09.158Z",
+      "isClosed": false
+    },
+    "ADM_RM_MWSQ7AK3": {
+      "code": "ADM_RM_MWSQ7AK3",
+      "title": "관리자 테스트 캔버스",
+      "owner": "admin",
+      "isSecret": false,
+      "secretCodeHash": null,
+      "secretCode": null,
+      "strokes": [],
+      "createdAt": "2026-11-23T03:48:28.085Z",
+      "isClosed": false
+    },
+    "ADM_RM_MWSQZ75S": {
+      "code": "ADM_RM_MWSQZ75S",
+      "title": "관리자 테스트 캔버스",
+      "owner": "admin",
+      "isSecret": false,
+      "secretCodeHash": null,
+      "secretCode": null,
+      "strokes": [],
+      "createdAt": "2026-11-23T04:10:10.154945+00:00"
     }
   }
 }

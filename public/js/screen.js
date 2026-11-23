@@ -206,22 +206,29 @@
 
         rooms.forEach(r => {
           const card = document.createElement('div');
-          card.className = `room-card ${r.isSecret ? 'secret' : ''}`;
+          card.className = `room-card ${r.isSecret ? 'secret' : ''} ${r.isClosed ? 'closed' : ''}`;
+          if (r.isClosed) {
+            card.style.opacity = '0.75';
+            card.style.borderColor = '#ef4444';
+            card.style.background = 'rgba(239, 68, 68, 0.08)';
+          }
           card.onclick = () => onSelectRoom(r);
           card.innerHTML = `
             <div>
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                <span style="background:${r.isSecret ? '#9333ea' : '#00bbf9'}; color:#fff; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">
+                <span style="background:${r.isClosed ? '#ef4444' : (r.isSecret ? '#9333ea' : '#00bbf9')}; color:#fff; font-size:11px; font-weight:800; padding:2px 8px; border-radius:6px;">
                   ${r.code}
                 </span>
-                <span>${r.isSecret ? '🔒 비밀방' : '🌐 공개방'}</span>
+                <span style="font-size:12px; font-weight:700; color:${r.isClosed ? '#ef4444' : '#fff'};">
+                  ${r.isClosed ? '⛔ 폐쇄됨(CLOSED)' : (r.isSecret ? '🔒 비밀방' : '🌐 공개방')}
+                </span>
               </div>
               <h3 style="font-size:16px; color:#fff; margin-bottom:4px;">${r.title}</h3>
               <p style="font-size:12px; color:#aaa;">개설자: ${r.owner}</p>
             </div>
-            <div style="font-size:11px; color:#00f5d4; margin-top:12px; display:flex; justify-content:space-between;">
+            <div style="font-size:11px; color:${r.isClosed ? '#ef4444' : '#00f5d4'}; margin-top:12px; display:flex; justify-content:space-between;">
               <span>누적 획: ${r.strokeCount}개</span>
-              <span style="font-weight:bold;">입장하기 →</span>
+              <span style="font-weight:bold;">${r.isClosed ? '⛔ 입장 불가' : '입장하기 →'}</span>
             </div>
           `;
           container.appendChild(card);
@@ -232,6 +239,14 @@
     }
 
     function onSelectRoom(r) {
+      if (r.isClosed) {
+        const isAdmin = currentAuthUser && currentAuthUser.role === 'admin';
+        if (!isAdmin) {
+          alert('⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다. 일반 유저는 입장할 수 없습니다.');
+          return;
+        }
+      }
+
       if (r.isSecret) {
         targetSecretRoom = r;
         document.getElementById('secret-target-room-name').innerText = `[${r.code}] ${r.title}`;
@@ -249,7 +264,10 @@
       try {
         const res = await fetch('/api/rooms/verify-entry', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
+          },
           body: JSON.stringify({ roomCode: targetSecretRoom.code, secretCode: code })
         });
         const data = await res.json();
@@ -315,11 +333,17 @@
       document.getElementById('modal-room-code-label').innerText = currentRoom;
 
       resetGraffitiBg();
-      socket.emit('join-screen', currentRoom);
+      socket.emit('join-screen', { room: currentRoom, token: authToken });
 
       // URL 해시/파라미터 업데이트
       window.history.pushState({}, '', `?room=${encodeURIComponent(currentRoom)}`);
     }
+
+    // 방 폐쇄 또는 세션 종료 통보 수신
+    socket.on('room-session-ended', (data) => {
+      alert(data.reason || '관리자에 의해 해당 방이 폐쇄되었거나 종료되었습니다.');
+      leaveToLobby();
+    });
 
     function leaveToLobby() {
       if (currentRoom) {
@@ -369,7 +393,71 @@
       }
     }
 
+    const stampImgCache = {};
+
     function drawStroke(s) {
+      if (s.type === 'stamp' && s.dataUrl) {
+        drawStampOnGraffiti(s);
+        return;
+      }
+
+      // 🐾 1. 페인트 발자국 렌더링
+      if (s.type === 'trail_footprint') {
+        gCtx.save();
+        gCtx.translate(s.x, s.y);
+        gCtx.rotate((s.angle || 0) + Math.PI / 2); // 걷는 방향 정렬
+        gCtx.fillStyle = s.color || '#00f5d4';
+        gCtx.shadowColor = s.color || '#00f5d4';
+        gCtx.shadowBlur = 10;
+
+        // 메인 발바닥 패드 (타원형)
+        gCtx.beginPath();
+        gCtx.ellipse(0, 0, 4, 5.5, 0, 0, Math.PI * 2);
+        gCtx.fill();
+
+        // 앞 발가락 점 3개
+        const toeOffsets = [-3.5, 0, 3.5];
+        for (let i = 0; i < 3; i++) {
+          gCtx.beginPath();
+          gCtx.arc(toeOffsets[i], -8, 1.6, 0, Math.PI * 2);
+          gCtx.fill();
+        }
+        gCtx.restore();
+        return;
+      }
+
+      // ✨ 2. 네온 점선 렌더링
+      if (s.type === 'trail_dot') {
+        gCtx.save();
+        gCtx.fillStyle = s.color || '#fee440';
+        gCtx.shadowColor = s.color || '#fee440';
+        gCtx.shadowBlur = 14;
+        gCtx.beginPath();
+        gCtx.arc(s.x, s.y, s.radius || 6, 0, Math.PI * 2);
+        gCtx.fill();
+        gCtx.restore();
+        return;
+      }
+
+      // 💨 3. 스프레이 분사 렌더링
+      if (s.type === 'trail_spray') {
+        gCtx.save();
+        gCtx.fillStyle = s.color || '#ff007f';
+        gCtx.shadowColor = s.color || '#ff007f';
+        gCtx.shadowBlur = 8;
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+          const r = Math.random() * 11 + 2;
+          const sz = Math.random() * 2 + 1;
+          gCtx.beginPath();
+          gCtx.arc(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r, sz, 0, Math.PI * 2);
+          gCtx.fill();
+        }
+        gCtx.restore();
+        return;
+      }
+
+      // 〰️ 4. 기본 네온 실선 (Solid Line)
       gCtx.save();
       gCtx.strokeStyle = s.color || '#00f5d4';
       gCtx.lineWidth = s.width || 8;
@@ -383,6 +471,35 @@
       gCtx.stroke();
       gCtx.restore();
     }
+
+    function drawStampOnGraffiti(s) {
+      let img = stampImgCache[s.id];
+      if (!img) {
+        img = new Image();
+        img.src = s.dataUrl;
+        img.onload = () => {
+          stampImgCache[s.id] = img;
+          renderStampImage(img, s);
+        };
+      } else if (img.complete) {
+        renderStampImage(img, s);
+      }
+    }
+
+    // 🎨 캔버스에 그린 그림 원본 그대로 도장 찍기 (스플래시나 흩뿌림 없이 그림 자체만 선명하게 각인)
+    function renderStampImage(img, s) {
+      gCtx.save();
+      // 픽셀 아트와 벡터 브러시 모두 뭉개짐 없이 선명하게 렌더링
+      gCtx.imageSmoothingEnabled = false;
+      gCtx.drawImage(img, s.x, s.y, s.width, s.height);
+      gCtx.restore();
+    }
+
+    // 스탬프 도장 쾅 찍힘 수신
+    socket.on('live-stamp-placed', (s) => {
+      currentStrokes.push(s);
+      drawStroke(s);
+    });
 
     function drawSplat(sp) {
       gCtx.save();
@@ -696,6 +813,43 @@
 
       if (bannerTimer) clearTimeout(bannerTimer);
       bannerTimer = setTimeout(() => docentBanner.style.display = 'none', 8000);
+    });
+
+    // 📢 관리자 긴급 공지 브로드캐스트 수신
+    socket.on('admin-announcement-broadcast', (data) => {
+      if (!data || !data.message) return;
+      let banner = document.getElementById('admin-broadcast-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'admin-broadcast-banner';
+        banner.style.position = 'fixed';
+        banner.style.top = '20px';
+        banner.style.left = '50%';
+        banner.style.transform = 'translateX(-50%)';
+        banner.style.zIndex = '99999';
+        banner.style.background = 'linear-gradient(135deg, rgba(239, 68, 68, 0.95), rgba(185, 28, 28, 0.95))';
+        banner.style.color = '#fff';
+        banner.style.padding = '14px 32px';
+        banner.style.borderRadius = '30px';
+        banner.style.boxShadow = '0 8px 32px rgba(239, 68, 68, 0.6), 0 0 20px rgba(255, 255, 255, 0.4)';
+        banner.style.border = '2px solid #fca5a5';
+        banner.style.fontWeight = '800';
+        banner.style.fontSize = '16px';
+        banner.style.backdropFilter = 'blur(10px)';
+        banner.style.display = 'flex';
+        banner.style.alignItems = 'center';
+        banner.style.gap = '12px';
+        banner.style.transition = 'all 0.3s ease';
+        document.body.appendChild(banner);
+      }
+      banner.innerHTML = `<span style="font-size:20px;">📢</span> <span>[긴급 관리자 공지]</span> <span style="font-weight:600; color:#fef08a;">${data.message}</span>`;
+      banner.style.display = 'flex';
+      banner.style.opacity = '1';
+      if (window.adminBannerTimeout) clearTimeout(window.adminBannerTimeout);
+      window.adminBannerTimeout = setTimeout(() => {
+        banner.style.opacity = '0';
+        setTimeout(() => banner.style.display = 'none', 300);
+      }, 10000);
     });
 
     // ====================================================

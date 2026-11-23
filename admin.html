@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🛡️ 시스템 관리자 관제 센터 (Admin Console)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    body {
+      background: radial-gradient(circle at top, #141726 0%, #080a10 100%);
+      color: #ffffff;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: rgba(15, 20, 36, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 14px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #00f5d4, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .status-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(0, 245, 212, 0.15);
+      border: 1px solid #00f5d4;
+      color: #00f5d4;
+      font-weight: 700;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .btn-header {
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+    }
+    .btn-header-link {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ddd;
+    }
+    .btn-header-link:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+    .btn-header-logout {
+      background: rgba(255, 89, 94, 0.15);
+      border: 1px solid #ff595e;
+      color: #ff595e;
+    }
+    .btn-header-logout:hover {
+      background: #ff595e;
+      color: #fff;
+    }
+
+    main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1300px;
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* KPI 카드 그리드 */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .kpi-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+    .kpi-title {
+      font-size: 12px;
+      color: #888;
+      font-weight: 600;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 900;
+      color: #00f5d4;
+    }
+    .kpi-sub {
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    /* 탭 네비게이션 */
+    .tab-bar {
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 8px;
+    }
+    .tab-btn {
+      padding: 10px 18px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: #888;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .tab-btn.active {
+      background: #00f5d4;
+      color: #080a10;
+      box-shadow: 0 0 15px rgba(0, 245, 212, 0.4);
+    }
+
+    /* 룸 카드 그리드 */
+    .rooms-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .room-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .room-card:hover {
+      border-color: rgba(0, 245, 212, 0.4);
+      transform: translateY(-2px);
+    }
+    .room-card.closed {
+      border-color: #ff595e;
+      background: rgba(255, 89, 94, 0.04);
+    }
+    .room-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .room-code {
+      font-size: 16px;
+      font-weight: 900;
+      color: #00f5d4;
+    }
+    .room-title {
+      font-size: 13px;
+      color: #ccc;
+    }
+    .room-badge-status {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+    .badge-open {
+      background: rgba(0, 245, 212, 0.15);
+      color: #00f5d4;
+      border: 1px solid #00f5d4;
+    }
+    .badge-closed {
+      background: rgba(255, 89, 94, 0.15);
+      color: #ff595e;
+      border: 1px solid #ff595e;
+    }
+
+    .room-stats-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: #aaa;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 8px 12px;
+      border-radius: 8px;
+    }
+
+    .room-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .btn-room-action {
+      padding: 8px;
+      border-radius: 8px;
+      border: none;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      transition: opacity 0.2s;
+    }
+    .btn-room-action:hover {
+      opacity: 0.85;
+    }
+    .btn-toggle-close {
+      background: #ff595e;
+      color: #fff;
+    }
+    .btn-toggle-open {
+      background: #00f5d4;
+      color: #080a10;
+    }
+    .btn-clear-canvas {
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+    }
+    .btn-open-screen {
+      grid-column: span 2;
+      background: linear-gradient(135deg, #7928ca, #c084fc);
+      color: #fff;
+      padding: 9px;
+      text-decoration: none;
+      text-align: center;
+    }
+
+    /* 유저 테이블 */
+    .user-table-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .table-toolbar {
+      padding: 14px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      gap: 12px;
+    }
+    .search-input {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: #fff;
+      font-size: 13px;
+      width: 260px;
+      outline: none;
+    }
+    .search-input:focus {
+      border-color: #00f5d4;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+    th {
+      padding: 12px 18px;
+      background: rgba(0, 0, 0, 0.25);
+      color: #888;
+      font-weight: 700;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      vertical-align: middle;
+    }
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .user-id-badge {
+      font-weight: 800;
+      color: #fff;
+    }
+    .role-select {
+      background: #141726;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
+    }
+    .role-select:focus {
+      border-color: #00f5d4;
+    }
+    .role-user { color: #ccc; }
+    .role-vip { color: #00f5d4; font-weight: 800; }
+    .role-admin { color: #fee440; font-weight: 900; }
+
+    .user-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-user-action {
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .btn-kick {
+      background: rgba(254, 228, 64, 0.15);
+      border: 1px solid #fee440;
+      color: #fee440;
+    }
+    .btn-clean-strokes {
+      background: rgba(192, 132, 252, 0.15);
+      border: 1px solid #c084fc;
+      color: #c084fc;
+    }
+    .btn-reset-pw {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ddd;
+    }
+    .btn-delete-user {
+      background: rgba(255, 89, 94, 0.15);
+      border: 1px solid #ff595e;
+      color: #ff595e;
+    }
+    .btn-delete-room {
+      background: rgba(255, 89, 94, 0.15);
+      border: 1px solid #ff595e;
+      color: #ff595e;
+    }
+    .btn-delete-room:hover {
+      background: #ff595e;
+      color: #fff;
+    }
+    .btn-edit-user {
+      background: rgba(0, 245, 212, 0.15);
+      border: 1px solid #00f5d4;
+      color: #00f5d4;
+    }
+    .btn-edit-user:hover {
+      background: #00f5d4;
+      color: #080a10;
+    }
+
+    /* 공지 섹션 */
+    .broadcast-card {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 700px;
+    }
+    .broadcast-input {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 12px;
+      color: #fff;
+      font-size: 14px;
+      width: 100%;
+      outline: none;
+    }
+    .btn-broadcast-submit {
+      padding: 12px 20px;
+      border-radius: 8px;
+      border: none;
+      background: linear-gradient(135deg, #00f5d4, #7928ca);
+      color: #fff;
+      font-weight: 800;
+      font-size: 14px;
+      cursor: pointer;
+      align-self: flex-start;
+      box-shadow: 0 0 15px rgba(0, 245, 212, 0.3);
+    }
+
+    /* 로그인 가드 모달 */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 7, 15, 0.92);
+      backdrop-filter: blur(15px);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    .login-card {
+      background: #141726;
+      border: 1px solid #00f5d4;
+      border-radius: 16px;
+      padding: 30px;
+      width: 90%;
+      max-width: 360px;
+      box-shadow: 0 0 35px rgba(0, 245, 212, 0.25);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .login-card h2 {
+      font-size: 18px;
+      font-weight: 900;
+      color: #00f5d4;
+      text-align: center;
+    }
+    .login-input {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+    }
+    .btn-login-submit {
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      background: #00f5d4;
+      color: #080a10;
+      font-weight: 900;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 6px;
+    }
+    .login-err {
+      color: #ff595e;
+      font-size: 12px;
+      text-align: center;
+      min-height: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 상단 네비게이션 헤더 -->
+  <header>
+    <div class="brand">
+      <span style="font-size:22px;">🛡️</span>
+      <div>
+        <h1>ANTIGRAVITY ADMIN CONSOLE</h1>
+        <div style="font-size:11px; color:#888;">실시간 캔버스 & 유저 통합 관제 센터</div>
+      </div>
+      <span class="status-badge" id="system-status-badge">🟢 SYSTEM ONLINE</span>
+    </div>
+    <div class="header-actions">
+      <span style="font-size:12px; color:#fee440; font-weight:800;" id="admin-user-tag">👑 admin</span>
+      <a href="/" target="_blank" class="btn-header btn-header-link">🖥️ 대형 전광판</a>
+      <a href="/controller.html" target="_blank" class="btn-header btn-header-link">📱 모바일</a>
+      <button onclick="handleLogout()" class="btn-header btn-header-logout">🚪 로그아웃</button>
+    </div>
+  </header>
+
+  <!-- 메인 대시보드 뷰 -->
+  <main>
+    <!-- 1. 핵심 KPI 지표 카드 -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">전체 룸 현황</div>
+        <div class="kpi-value" id="kpi-total-rooms">-</div>
+        <div class="kpi-sub" id="kpi-rooms-sub">활성 방 모니터링 중</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">실시간 접속자 (전광판 + 모바일)</div>
+        <div class="kpi-value" id="kpi-active-users">-</div>
+        <div class="kpi-sub" id="kpi-users-sub">스크린 0대 · 컨트롤러 0대</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">누적 캔버스 획 수</div>
+        <div class="kpi-value" id="kpi-total-strokes">-</div>
+        <div class="kpi-sub">모든 방의 스트로크 합계</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">등록된 아티스트 계정</div>
+        <div class="kpi-value" id="kpi-total-artists">-</div>
+        <div class="kpi-sub">DB 유저 데이터베이스</div>
+      </div>
+    </div>
+
+    <!-- 2. 탭 바 -->
+    <div class="tab-bar">
+      <button class="tab-btn active" id="tab-btn-rooms" onclick="switchAdminTab('rooms')">🖥️ 룸 & 캔버스 관제</button>
+      <button class="tab-btn" id="tab-btn-users" onclick="switchAdminTab('users')">👥 유저 관리 & 제재</button>
+      <button class="tab-btn" id="tab-btn-rawdb" onclick="switchAdminTab('rawdb')">🗄️ 유저 DB 원본(JSON) 제어</button>
+      <button class="tab-btn" id="tab-btn-broadcast" onclick="switchAdminTab('broadcast')">📢 긴급 전파 & 브로드캐스트</button>
+    </div>
+
+    <!-- 탭 1: 룸 & 캔버스 관제 (방 강제 닫기/열기, 캔버스 초기화) -->
+    <section id="section-rooms">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h2 style="font-size:16px; font-weight:800; color:#00f5d4;">실시간 방 상태 및 캔버스 제어</h2>
+        <span style="font-size:12px; color:#888;">3초마다 실시간 자동 갱신</span>
+      </div>
+      <div class="rooms-grid" id="rooms-grid-container">
+        <!-- 룸 카드들 동적 렌더링 -->
+      </div>
+    </section>
+
+    <!-- 탭 2: 유저 관리 & 트롤 제재 (권한 변경, 강제 퇴장, 획 일괄 삭제) -->
+    <section id="section-users" style="display:none;">
+      <div class="user-table-card">
+        <div class="table-toolbar">
+          <h2 style="font-size:16px; font-weight:800; color:#c084fc;">아티스트 유저 데이터베이스 및 제재</h2>
+          <input type="text" class="search-input" id="user-search-input" placeholder="🔍 아이디 또는 닉네임 검색..." oninput="filterUserTable()" />
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>아티스트 아이디</th>
+              <th>활동명(Alias)</th>
+              <th>권한(Role) 변경</th>
+              <th>접속 상태</th>
+              <th>제재 & 관리 조치</th>
+            </tr>
+          </thead>
+          <tbody id="user-table-body">
+            <!-- 유저 행 동적 렌더링 -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 탭 3: 긴급 브로드캐스트 -->
+    <section id="section-broadcast" style="display:none;">
+      <div class="broadcast-card">
+        <h2 style="font-size:16px; font-weight:800; color:#fee440;">📢 전광판 & 모바일 실시간 긴급 공지 전송</h2>
+        <p style="font-size:13px; color:#aaa; line-height:1.5;">
+          입력하신 공지 문구가 접속 중인 모든 대형 전광판과 모바일 컨트롤러 상단에 네온 배너로 실시간 송출됩니다.
+        </p>
+        <input type="text" class="broadcast-input" id="broadcast-message-input" placeholder="예: 📢 5분 뒤 베스트 그래피티 아트 선정 이벤트가 시작됩니다!" />
+        <button class="btn-broadcast-submit" onclick="submitBroadcast()">🚀 공지 즉시 송출</button>
+      </div>
+    </section>
+
+    <!-- 탭 4: 유저 데이터베이스 원본 제어 (Raw JSON Viewer & Bulk Editor) -->
+    <section id="section-rawdb" style="display:none;">
+      <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:10px;">
+          <div>
+            <h2 style="font-size:16px; font-weight:800; color:#00f5d4;">🗄️ 유저 데이터베이스 실시간 원본(JSON) 열람 및 직접 편집</h2>
+            <div style="font-size:12px; color:#888; margin-top:4px;">
+              현재 서버 및 Supabase 클라우드에 영구 보존된 유저/설정 JSON입니다. 원하는 대로 편집 후 직접 저장할 수 있습니다.
+            </div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-header btn-header-link" onclick="loadRawDb()" style="background:rgba(255,255,255,0.1); padding:8px 14px; font-size:13px;">
+              🔄 최신 DB 새로고침
+            </button>
+            <button class="btn-header" onclick="saveRawDb()" style="background:#00f5d4; color:#080a10; padding:8px 16px; font-size:13px; font-weight:900;">
+              💾 JSON 원본 직접 저장
+            </button>
+          </div>
+        </div>
+        <div id="rawdb-status-bar" style="font-size:12px; margin-bottom:10px; color:#aaa;"></div>
+        <textarea id="rawdb-editor" spellcheck="false" style="width: 100%; height: 560px; background: #0b0e18; color: #a5f3fc; border: 1px solid rgba(0, 245, 212, 0.35); border-radius: 10px; padding: 16px; font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 13px; line-height: 1.5; resize: vertical; outline: none;"></textarea>
+      </div>
+    </section>
+  </main>
+
+  <!-- 유저 상세 정보 인스펙터 & 수정 모달 -->
+  <div class="modal-overlay" id="user-edit-modal" style="display:none;">
+    <div style="background:#131728; border:1px solid rgba(0,245,212,0.4); border-radius:16px; padding:24px; width:480px; max-width:95vw; box-shadow:0 12px 48px rgba(0,0,0,0.6); display:flex; flex-direction:column; gap:14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h2 style="font-size:17px; font-weight:800; color:#00f5d4;" id="edit-modal-title">✏️ 유저 정보 직접 수정</h2>
+        <button onclick="closeUserEditModal()" style="background:none; border:none; color:#aaa; font-size:20px; cursor:pointer;">✕</button>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:11px; color:#888;">유저 아이디 (고유 식별자)</label>
+        <input type="text" id="edit-user-id" readonly style="background:rgba(255,255,255,0.05); border:1px solid #444; color:#888; padding:8px 10px; border-radius:6px; font-size:13px;" />
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:11px; color:#aaa;">활동명 (Alias)</label>
+        <input type="text" id="edit-user-alias" style="background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px;" />
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:11px; color:#aaa;">권한 (Role)</label>
+        <select id="edit-user-role" style="background:#1e2438; border:1px solid #555; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px;">
+          <option value="user">일반 유저 (user)</option>
+          <option value="vip">👑 VIP 유저 (vip)</option>
+          <option value="admin">⚡ 관리자 (admin)</option>
+        </select>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <label style="font-size:11px; color:#aaa;">비밀번호 (Password - 확인 및 자유 변경)</label>
+        <input type="text" id="edit-user-password" style="background:rgba(0,0,0,0.4); border:1px solid #555; color:#fee440; padding:8px 10px; border-radius:6px; font-size:13px; font-weight:700;" />
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11px; color:#aaa;">컨트롤러 닉네임</label>
+          <input type="text" id="edit-user-pref-nickname" style="background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11px; color:#aaa;">대표 색상 (Color)</label>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <input type="color" id="edit-user-pref-color-picker" onchange="document.getElementById('edit-user-pref-color').value=this.value" style="width:36px; height:36px; border:none; background:none; cursor:pointer;" />
+            <input type="text" id="edit-user-pref-color" style="flex:1; background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px;" />
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11px; color:#aaa;">브러시 크기</label>
+          <input type="number" id="edit-user-pref-brushsize" min="2" max="60" style="background:rgba(0,0,0,0.4); border:1px solid #555; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px;" />
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <label style="font-size:11px; color:#aaa;">컨트롤러 테마</label>
+          <select id="edit-user-pref-theme" style="background:#1e2438; border:1px solid #555; color:#fff; padding:8px 10px; border-radius:6px; font-size:13px;">
+            <option value="cyberpunk">사이버펑크 네온</option>
+            <option value="retro_arcade">레트로 아케이드</option>
+            <option value="minimal_dark">미니멀 다크</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+        <button onclick="closeUserEditModal()" style="padding:10px 16px; border-radius:8px; background:rgba(255,255,255,0.1); border:none; color:#ddd; cursor:pointer; font-weight:700;">취소</button>
+        <button onclick="submitUserEdit()" style="padding:10px 20px; border-radius:8px; background:#00f5d4; border:none; color:#080a10; font-weight:900; cursor:pointer;">💾 저장하기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 관리자 로그인 인증 가드 모달 -->
+  <div class="modal-overlay" id="admin-login-modal" style="display:none;">
+    <div class="login-card">
+      <div style="text-align:center; font-size:36px;">🛡️</div>
+      <h2>ADMIN CONSOLE LOGIN</h2>
+      <div style="font-size:12px; color:#888; text-align:center;">슈퍼 관리자 인증이 필요합니다</div>
+      <input type="text" class="login-input" id="admin-login-id" placeholder="관리자 아이디 (admin)" />
+      <input type="password" class="login-input" id="admin-login-pw" placeholder="비밀번호" />
+      <div class="login-err" id="admin-login-err"></div>
+      <button class="btn-login-submit" onclick="submitAdminLogin()">관리자 인증 및 입장</button>
+    </div>
+  </div>
+
+  <script>
+    let authToken = localStorage.getItem('qr_auth_token') || '';
+    let currentAdmin = null;
+    let cachedRooms = [];
+    let cachedUsers = [];
+    let autoRefreshTimer = null;
+
+    // 1. 관리자 인증 상태 확인
+    async function checkAdminAuth() {
+      if (!authToken) {
+        showLoginModal();
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (data.loggedIn && data.user.role === 'admin') {
+          currentAdmin = data.user;
+          document.getElementById('admin-user-tag').innerText = `👑 ${currentAdmin.alias || currentAdmin.userId}`;
+          hideLoginModal();
+          initDashboard();
+        } else {
+          showLoginModal('관리자(Admin) 권한이 없는 계정입니다.');
+        }
+      } catch (e) {
+        showLoginModal();
+      }
+    }
+
+    function showLoginModal(msg = '') {
+      document.getElementById('admin-login-modal').style.display = 'flex';
+      document.getElementById('admin-login-err').innerText = msg;
+    }
+
+    function hideLoginModal() {
+      document.getElementById('admin-login-modal').style.display = 'none';
+      document.getElementById('admin-login-err').innerText = '';
+    }
+
+    async function submitAdminLogin() {
+      const userId = document.getElementById('admin-login-id').value.trim();
+      const password = document.getElementById('admin-login-pw').value;
+      const errBox = document.getElementById('admin-login-err');
+
+      if (!userId || !password) {
+        errBox.innerText = '아이디와 비밀번호를 모두 입력하세요.';
+        return;
+      }
+
+      errBox.innerText = '인증 확인 중...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.user?.role === 'admin') {
+          authToken = data.token;
+          localStorage.setItem('qr_auth_token', authToken);
+          currentAdmin = data.user;
+          hideLoginModal();
+          initDashboard();
+        } else {
+          errBox.innerText = data.error || '관리자 권한이 없거나 비밀번호가 틀립니다.';
+        }
+      } catch (e) {
+        errBox.innerText = '서버 통신 오류';
+      }
+    }
+
+    function handleLogout() {
+      if (!confirm('관리자 세션을 종료하고 로그아웃하시겠습니까?')) return;
+      localStorage.removeItem('qr_auth_token');
+      authToken = '';
+      currentAdmin = null;
+      showLoginModal();
+    }
+
+    // 2. 대시보드 데이터 로드
+    async function initDashboard() {
+      await Promise.all([loadOverview(), loadUsers()]);
+      if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+      autoRefreshTimer = setInterval(async () => {
+        if (currentAdmin) {
+          await Promise.all([loadOverview(), loadUsers()]);
+        }
+      }, 3500);
+    }
+
+    // 3. 개요 및 룸 목록 로드
+    async function loadOverview() {
+      try {
+        const res = await fetch('/api/admin/overview', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // KPI 업데이트
+        document.getElementById('kpi-total-rooms').innerText = data.stats.totalRooms;
+        document.getElementById('kpi-active-users').innerText = data.stats.activeScreensTotal + data.stats.activeControllersTotal;
+        document.getElementById('kpi-users-sub').innerText = `스크린 ${data.stats.activeScreensTotal}대 · 컨트롤러 ${data.stats.activeControllersTotal}대`;
+        document.getElementById('kpi-total-strokes').innerText = data.stats.totalStrokes.toLocaleString() + '획';
+        document.getElementById('kpi-total-artists').innerText = data.stats.totalUsers + '명';
+
+        cachedRooms = data.rooms;
+        renderRooms(cachedRooms);
+      } catch (e) {}
+    }
+
+    function renderRooms(rooms) {
+      const container = document.getElementById('rooms-grid-container');
+      container.innerHTML = rooms.map(r => {
+        const isOpen = !r.isClosed;
+        return `
+          <div class="room-card ${isOpen ? '' : 'closed'}">
+            <div class="room-header">
+              <div>
+                <span class="room-code">${r.code}</span>
+                <span class="room-title"> · ${r.title}</span>
+              </div>
+              <span class="room-badge-status ${isOpen ? 'badge-open' : 'badge-closed'}">
+                ${isOpen ? '🟢 OPEN' : '🔴 CLOSED'}
+              </span>
+            </div>
+
+            <div class="room-stats-row">
+              <span>🖥️ 스크린: <b style="color:#00f5d4;">${r.activeScreens}</b>대</span>
+              <span>📱 모바일: <b style="color:#c084fc;">${r.activePlayers}</b>명</span>
+              <span>🎨 스트로크: <b style="color:#fee440;">${r.strokeCount}</b>개</span>
+            </div>
+
+            <div class="room-actions">
+              <button class="btn-room-action ${isOpen ? 'btn-toggle-close' : 'btn-toggle-open'}" onclick="toggleRoomStatus('${r.code}')">
+                ${isOpen ? '🔴 방 강제 닫기' : '🟢 방 다시 열기'}
+              </button>
+              <button class="btn-room-action btn-clear-canvas" onclick="clearRoomCanvas('${r.code}')">
+                🧹 캔버스 비우기
+              </button>
+              <button class="btn-room-action btn-delete-room" onclick="deleteRoom('${r.code}')">
+                🚨 방 영구 삭제
+              </button>
+              <a href="/?room=${encodeURIComponent(r.code)}" target="_blank" class="btn-room-action btn-open-screen" style="grid-column: span 1;">
+                🖥️ 전광판
+              </a>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 4. 방 상태 강제 변경 (강제 닫기 / 열기)
+    async function toggleRoomStatus(roomCode) {
+      if (!confirm(`[${roomCode}] 방의 상태를 변경하시겠습니까?`)) return;
+      try {
+        const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomCode)}/toggle-status`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadOverview();
+      } catch (e) {
+        alert('방 상태 변경 실패');
+      }
+    }
+
+    // 5. 방 캔버스 강제 전체 초기화
+    async function clearRoomCanvas(roomCode) {
+      if (!confirm(`⚠️ [${roomCode}] 방의 캔버스 획을 정말 모두 삭제하시겠습니까? (되돌릴 수 없음)`)) return;
+      try {
+        const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomCode)}/clear-canvas`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          }
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadOverview();
+      } catch (e) {
+        alert('캔버스 초기화 실패');
+      }
+    }
+
+    // 6. 유저 목록 로드 및 렌더링
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/admin/users', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) return;
+        cachedUsers = await res.json();
+        renderUserTable(cachedUsers);
+      } catch (e) {}
+    }
+
+    function renderUserTable(users) {
+      const tbody = document.getElementById('user-table-body');
+      tbody.innerHTML = users.map(u => {
+        const isOnline = u.isOnline;
+        const roleClass = u.role === 'admin' ? 'role-admin' : (u.role === 'vip' ? 'role-vip' : 'role-user');
+        const isAdminAccount = u.userId === 'admin';
+
+        return `
+          <tr>
+            <td><span class="user-id-badge">${u.userId}</span></td>
+            <td><span style="color:#ddd;">${u.alias || '-'}</span></td>
+            <td>
+              <select class="role-select ${roleClass}" ${isAdminAccount ? 'disabled title="기본 관리자는 권한 변경 불가"' : ''} onchange="changeUserRole('${u.userId}', this.value)">
+                <option value="user" ${u.role === 'user' ? 'selected' : ''}>일반 (User)</option>
+                <option value="vip" ${u.role === 'vip' ? 'selected' : ''}>👑 VIP (Vip)</option>
+                <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>⚡ ADMIN (Admin)</option>
+              </select>
+            </td>
+            <td>
+              <span style="font-size:11px; font-weight:700; color:${isOnline ? '#00f5d4' : '#666'};">
+                ${isOnline ? '🟢 온라인' : '⚪ 오프라인'}
+              </span>
+            </td>
+            <td>
+              <div class="user-actions">
+                <button class="btn-user-action btn-edit-user" onclick="openUserEditModal('${u.userId}')" title="유저 정보 상세 보기 및 직접 수정">
+                  ✏️ 상세수정
+                </button>
+                <button class="btn-user-action btn-kick" onclick="kickUser('${u.userId}')" title="현재 소켓 연결 강제 종료">
+                  🥾 강퇴
+                </button>
+                <button class="btn-user-action btn-clean-strokes" onclick="cleanupUserStrokes('${u.userId}')" title="이 유저가 그린 모든 선/도장 전역 삭제">
+                  🧹 낙서삭제
+                </button>
+                <button class="btn-user-action btn-reset-pw" onclick="resetUserPassword('${u.userId}')" title="비밀번호 재설정">
+                  🔑 비번
+                </button>
+                ${!isAdminAccount ? `
+                  <button class="btn-user-action btn-delete-user" onclick="deleteUser('${u.userId}')" title="계정 영구 삭제">
+                    🗑️ 삭제
+                  </button>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterUserTable() {
+      const q = document.getElementById('user-search-input').value.toLowerCase().trim();
+      const filtered = cachedUsers.filter(u =>
+        u.userId.toLowerCase().includes(q) || (u.alias && u.alias.toLowerCase().includes(q))
+      );
+      renderUserTable(filtered);
+    }
+
+    // 7. 유저 권한 변경 (Role Change)
+    async function changeUserRole(userId, newRole) {
+      try {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/role`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ role: newRole })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message);
+          loadUsers();
+        } else {
+          alert('권한 변경 실패: ' + data.error);
+          loadUsers();
+        }
+      } catch (e) {
+        alert('권한 변경 통신 오류');
+      }
+    }
+
+    // 8. 유저 강제 퇴장 (Kick)
+    async function kickUser(userId) {
+      if (!confirm(`[${userId}] 유저의 연결을 즉시 강제 종료(Kick)하시겠습니까?`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/kick`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadUsers();
+      } catch (e) {
+        alert('강퇴 실패');
+      }
+    }
+
+    // 9. 특정 유저의 낙서 전역 일괄 삭제 (Troll Cleanup)
+    async function cleanupUserStrokes(userId) {
+      if (!confirm(`⚠️ [${userId}] 유저가 그린 모든 선과 도장을 전역에서 일괄 삭제하시겠습니까?`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/cleanup-strokes`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadOverview();
+      } catch (e) {
+        alert('낙서 삭제 실패');
+      }
+    }
+
+    // 10. 비밀번호 재설정
+    async function resetUserPassword(userId) {
+      const newPw = prompt(`[${userId}] 유저의 새 비밀번호를 입력하세요:`, '1234');
+      if (!newPw || !newPw.trim()) return;
+
+      try {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/reset-password`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ newPassword: newPw.trim() })
+        });
+        const data = await res.json();
+        alert(data.message);
+      } catch (e) {
+        alert('비밀번호 재설정 실패');
+      }
+    }
+
+    // 11. 유저 계정 삭제
+    async function deleteUser(userId) {
+      if (!confirm(`🚨 [${userId}] 유저 계정을 영구 삭제하시겠습니까? (되돌릴 수 없음)`)) return;
+      try {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadUsers();
+      } catch (e) {
+        alert('유저 삭제 실패');
+      }
+    }
+
+    // 12. 공지 브로드캐스트 전송
+    async function submitBroadcast() {
+      const input = document.getElementById('broadcast-message-input');
+      const msg = input.value.trim();
+      if (!msg) {
+        alert('공지 내용을 입력하세요.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/broadcast', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ message: msg })
+        });
+        const data = await res.json();
+        alert(data.message);
+        input.value = '';
+      } catch (e) {
+        alert('공지 전송 실패');
+      }
+    }
+
+    // 13. 방 영구 삭제 (Delete Room Completely)
+    async function deleteRoom(roomCode) {
+      if (!confirm(`🚨 [${roomCode}] 방을 영구 삭제하시겠습니까?\n이 방의 모든 캔버스 데이터와 참가자 연결이 즉시 제거되며 복구할 수 없습니다.`)) return;
+      try {
+        const res = await fetch(`/api/admin/rooms/${encodeURIComponent(roomCode)}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        alert(data.message);
+        loadOverview();
+      } catch (e) {
+        alert('방 삭제 실패');
+      }
+    }
+
+    // 14. 유저 상세 인스펙터 모달 열기 및 값 채우기
+    let editingUserId = null;
+    function openUserEditModal(userId) {
+      editingUserId = userId;
+      const u = cachedUsers.find(x => x.userId === userId) || {};
+      const pref = u.preferences || {};
+
+      document.getElementById('edit-modal-title').innerText = `✏️ [${userId}] 유저 상세 정보 수정`;
+      document.getElementById('edit-user-id').value = userId;
+      document.getElementById('edit-user-alias').value = u.alias || '';
+      document.getElementById('edit-user-role').value = u.role || 'user';
+      document.getElementById('edit-user-role').disabled = (userId === 'admin');
+      document.getElementById('edit-user-password').value = u.password || '';
+
+      document.getElementById('edit-user-pref-nickname').value = pref.nickname || u.alias || '';
+      const colorVal = pref.color || '#00f5d4';
+      document.getElementById('edit-user-pref-color').value = colorVal;
+      document.getElementById('edit-user-pref-color-picker').value = colorVal.startsWith('#') ? colorVal : '#00f5d4';
+      document.getElementById('edit-user-pref-brushsize').value = pref.brushSize || 10;
+      document.getElementById('edit-user-pref-theme').value = pref.controllerTheme || 'cyberpunk';
+
+      document.getElementById('user-edit-modal').style.display = 'flex';
+    }
+
+    function closeUserEditModal() {
+      document.getElementById('user-edit-modal').style.display = 'none';
+      editingUserId = null;
+    }
+
+    async function submitUserEdit() {
+      if (!editingUserId) return;
+      const alias = document.getElementById('edit-user-alias').value.trim();
+      const role = document.getElementById('edit-user-role').value;
+      const password = document.getElementById('edit-user-password').value.trim();
+      const prefNickname = document.getElementById('edit-user-pref-nickname').value.trim();
+      const prefColor = document.getElementById('edit-user-pref-color').value.trim();
+      const prefBrushSize = parseInt(document.getElementById('edit-user-pref-brushsize').value) || 10;
+      const prefTheme = document.getElementById('edit-user-pref-theme').value;
+
+      try {
+        const res = await fetch(`/api/admin/users/${encodeURIComponent(editingUserId)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            alias,
+            role,
+            password,
+            preferences: {
+              nickname: prefNickname,
+              color: prefColor,
+              brushSize: prefBrushSize,
+              controllerTheme: prefTheme
+            }
+          })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message || '유저 정보가 저장되었습니다.');
+          closeUserEditModal();
+          await loadUsers();
+          if (document.getElementById('section-rawdb').style.display === 'block') {
+            await loadRawDb();
+          }
+        } else {
+          alert('저장 실패: ' + data.error);
+        }
+      } catch (e) {
+        alert('유저 정보 수정 통신 오류');
+      }
+    }
+
+    // 15. 유저 DB 원본(JSON) 로드
+    async function loadRawDb() {
+      const editor = document.getElementById('rawdb-editor');
+      const status = document.getElementById('rawdb-status-bar');
+      status.innerText = '⏳ 최신 유저 데이터베이스 로딩 중...';
+      try {
+        const res = await fetch('/api/admin/users/raw', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('DB 로드 실패');
+        const data = await res.json();
+        const payload = {
+          users: data.users || {},
+          preferences: data.preferences || {}
+        };
+        editor.value = JSON.stringify(payload, null, 2);
+        status.innerHTML = `🟢 <b>동기화 완료</b> (총 유저: ${Object.keys(payload.users).length}명, 갱신시각: ${new Date().toLocaleTimeString()})`;
+      } catch (e) {
+        status.innerHTML = `<span style="color:#ff595e;">❌ DB 로드 실패: ${e.message}</span>`;
+      }
+    }
+
+    // 16. 유저 DB 원본(JSON) 저장
+    async function saveRawDb() {
+      const editor = document.getElementById('rawdb-editor');
+      const status = document.getElementById('rawdb-status-bar');
+      let payload = null;
+
+      try {
+        payload = JSON.parse(editor.value);
+      } catch (err) {
+        alert('❌ JSON 구문 오류:\n' + err.message + '\n\n올바른 JSON 문법인지 확인하세요.');
+        return;
+      }
+
+      if (!payload.users || typeof payload.users !== 'object') {
+        alert('❌ 최상위에 "users" 객체가 필요합니다.');
+        return;
+      }
+
+      if (!confirm(`⚠️ 전체 유저 데이터베이스 원본을 직접 저장하시겠습니까?\n총 ${Object.keys(payload.users).length}명의 유저 정보가 로컬 파일 및 Supabase 클라우드에 즉시 반영됩니다.`)) {
+        return;
+      }
+
+      status.innerText = '💾 데이터베이스 저장 및 클라우드 동기화 중...';
+      try {
+        const res = await fetch('/api/admin/users/raw', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert('✅ ' + data.message);
+          status.innerHTML = `🟢 <b>성공적으로 저장됨</b> (${new Date().toLocaleTimeString()})`;
+          await loadUsers();
+          await loadOverview();
+        } else {
+          alert('저장 실패: ' + data.error);
+          status.innerHTML = `<span style="color:#ff595e;">❌ 저장 실패: ${data.error}</span>`;
+        }
+      } catch (e) {
+        alert('저장 통신 실패');
+      }
+    }
+
+    // 17. 탭 전환
+    function switchAdminTab(tab) {
+      const tabs = ['rooms', 'users', 'rawdb', 'broadcast'];
+      for (const t of tabs) {
+        const btn = document.getElementById(`tab-btn-${t}`);
+        const sec = document.getElementById(`section-${t}`);
+        if (btn) btn.classList.toggle('active', t === tab);
+        if (sec) sec.style.display = t === tab ? 'block' : 'none';
+      }
+      if (tab === 'rawdb') {
+        loadRawDb();
+      }
+    }
+
+    // 시작 시 인증 체크
+    window.addEventListener('DOMContentLoaded', checkAdminAuth);
+  </script>
+</body>
+</html>

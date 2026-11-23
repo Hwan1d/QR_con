@@ -49,11 +49,11 @@
       color: #00f5d4;
     }
 
-    /* 듀얼 모드 전환 탭 (조이스틱 vs 터치 캔버스) */
+    /* 모드 전환 탭 (조이스틱 vs 터치 낙서 vs 배틀 캔버스) */
     .mode-tab-bar {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
+      grid-template-columns: 1fr 1fr 1.2fr;
+      gap: 5px;
       background: rgba(0, 0, 0, 0.3);
       padding: 4px;
       border-radius: 10px;
@@ -379,4 +379,265 @@
       border: 1px solid rgba(255, 255, 255, 0.15);
       font-size: 11px;
       cursor: pointer;
+    }
+
+    /* ========================================================
+       ⚔️ 픽셀페인터 배틀 전용 뷰 스타일
+       ======================================================== */
+    #battle-view {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      height: 100%;
+      overflow-y: auto;
+      gap: 8px;
+    }
+
+    /* 배틀 상단 상태 배너 (주제 & 남은 시간) */
+    .battle-header-banner {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(90deg, rgba(147, 51, 234, 0.25), rgba(0, 245, 212, 0.25));
+      border: 1px solid rgba(147, 51, 234, 0.4);
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .battle-topic-tag {
+      color: #00f5d4;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .battle-timer-tag {
+      background: #ff595e;
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      animation: pulse-timer 1.5s infinite;
+    }
+    @keyframes pulse-timer {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.85; transform: scale(1.04); }
+    }
+
+    /* 스타일 전환 바 (자유 브러시 vs 픽셀 도트) */
+    .battle-style-bar {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 3px;
+      border-radius: 8px;
+    }
+    .btn-style-choice {
+      padding: 6px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: #aaa;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .btn-style-choice.active {
+      background: #9333ea;
+      color: #fff;
+      border-color: #c084fc;
+      box-shadow: 0 0 10px rgba(192, 132, 252, 0.4);
+    }
+
+    /* 서브 툴바 (펜, 채우기, 지우개, Undo, Clear) */
+    .battle-toolbar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 4px 6px;
+      gap: 4px;
+    }
+    .tool-group {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    .btn-battle-tool {
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(0, 0, 0, 0.3);
+      color: #ccc;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .btn-battle-tool.active {
+      background: #00f5d4;
+      color: #070810;
+      border-color: #00f5d4;
+      font-weight: 800;
+    }
+
+    /* 옵션 바 (굵기 or 그리드 크기) */
+    .battle-options-bar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #aaa;
+      padding: 0 4px;
+    }
+    .btn-option-pill {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #ddd;
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 10px;
+      cursor: pointer;
+    }
+    .btn-option-pill.active {
+      background: #3b82f6;
+      border-color: #60a5fa;
+      color: #fff;
+      font-weight: 800;
+    }
+
+    /* 배틀 캔버스 컨테이너 */
+    .battle-canvas-frame {
+      position: relative;
+      width: min(88vw, 360px);
+      height: min(88vw, 360px);
+      background: #141726;
+      border: 2px solid #9333ea;
+      border-radius: 12px;
+      box-shadow: 0 0 25px rgba(147, 51, 234, 0.25);
+      overflow: hidden;
+      touch-action: none;
+    }
+    #battle-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #141726;
+      touch-action: none;
+    }
+    #battle-canvas.pixel-mode {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    /* 하단 배틀 제출 버튼 */
+    .btn-battle-submit {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(135deg, #00f5d4, #00bbf9);
+      color: #070810;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 0 15px rgba(0, 245, 212, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-battle-submit:active { transform: scale(0.98); }
+    .btn-battle-submit.submitted {
+      background: #10b981;
+      color: #fff;
+      cursor: default;
+    }
+
+    /* 투표 단계 모달/오버레이 */
+    .battle-vote-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 8, 22, 0.95);
+      z-index: 1000;
+      flex-direction: column;
+      padding: 14px;
+      overflow-y: auto;
+      gap: 12px;
+    }
+    .vote-item-card {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .vote-img-preview {
+      width: 100%;
+      aspect-ratio: 1;
+      background: #141726;
+      border-radius: 8px;
+      object-fit: contain;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .vote-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .btn-vote-choice {
+      padding: 8px;
+      border-radius: 8px;
+      border: none;
+      font-size: 11px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .btn-vote-choice.best {
+      background: #f59e0b;
+      color: #000;
+    }
+    .btn-vote-choice.ai {
+      background: #ec4899;
+      color: #fff;
+    }
+    .btn-vote-choice.voted {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    /* 트레일 자국 스타일 선택 바 */
+    .btn-trail-pill {
+      flex: 1;
+      padding: 6px 3px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.05);
+      color: #aaa;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+    .btn-trail-pill.active {
+      background: linear-gradient(135deg, #c084fc, #7928ca);
+      color: #fff;
+      border-color: #c084fc;
+      box-shadow: 0 0 12px rgba(192, 132, 252, 0.45);
     }

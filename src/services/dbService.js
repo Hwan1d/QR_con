@@ -18,7 +18,7 @@ function loadDb() {
   if (!fs.existsSync(DB_FILE)) {
     const initialDb = {
       users: {
-        admin: { userId: 'admin', alias: '시스템 관리자 (Admin)', passwordHash: hashPw('admin1234'), role: 'admin' },
+        admin: { userId: 'admin', alias: '슈퍼 관리자 (Admin)', password: 'admin', passwordHash: hashPw('admin'), role: 'admin' },
         user_a: { userId: 'user_a', alias: '아티스트 A (LOBBY 방장)', passwordHash: hashPw('1234'), role: 'user' },
         user_b: { userId: 'user_b', alias: '아티스트 B (일반 유저)', passwordHash: hashPw('1234'), role: 'user' }
       },
@@ -114,6 +114,8 @@ async function syncFromSupabase() {
     const { data: users, error: uErr } = await supabase.from('users').select('*');
     if (!uErr && users) {
       users.forEach(u => {
+        // 어드민 계정은 로컬 보안 설정(ID: admin, PW: admin) 강제 보호
+        if (u.user_id === 'admin') return;
         db.users[u.user_id] = {
           userId: u.user_id,
           alias: u.alias || u.user_id,
@@ -123,6 +125,14 @@ async function syncFromSupabase() {
         };
       });
     }
+    // 어드민 단독 권한 보장
+    db.users['admin'] = {
+      userId: 'admin',
+      alias: '슈퍼 관리자 (Admin)',
+      password: 'admin',
+      passwordHash: hashPw('admin'),
+      role: 'admin'
+    };
 
     const { data: rooms, error: rErr } = await supabase.from('rooms').select('*');
     if (!rErr && rooms) {

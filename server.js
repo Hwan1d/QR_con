@@ -12,6 +12,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const roomRoutes = require('./src/routes/roomRoutes');
 const canvasRoutes = require('./src/routes/canvasRoutes');
 const aiRoutes = require('./src/routes/aiRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +32,8 @@ app.use('/api', authRoutes); // /api/preferences 호환 지원
 app.use('/api', roomRoutes); // /api/qr, /api/rooms
 app.use('/api', canvasRoutes); // /api/canvas
 app.use('/api/ai', aiRoutes); // /api/ai/spawn-bot, /api/ai/ask-critic 등
+app.use('/api/admin', adminRoutes); // 관리자 관제 센터 API
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/api/runs', (req, res) => res.json(db.runs || []));
 
 // Supabase 클라우드 데이터 서버 메모리로 동기화

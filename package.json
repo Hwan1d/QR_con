@@ -4,7 +4,8 @@
   "description": "Interactive QR-triggered Arcade & Live Canvas",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/test_baking_and_modes.js && node tests/test_battle_mode.js && node tests/test_admin_suite.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

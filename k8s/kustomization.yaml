@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - deployment.yaml
+  - service.yaml
+  - configmap.yaml
+
+# GitHub Actions가 새 Docker 이미지를 빌드했을 때 아래 태그를 자동으로 갱신합니다.
+images:
+  - name: hwan1d/qr-canvas-app
+    newTag: latest

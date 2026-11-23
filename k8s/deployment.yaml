@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qr-canvas-app
+  namespace: default
+  labels:
+    app: qr-canvas-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qr-canvas-app
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: qr-canvas-app
+    spec:
+      containers:
+        - name: qr-canvas-container
+          image: hwan1d/qr-canvas-app:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: qr-canvas-config
+          env:
+            - name: SUPABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: qr-canvas-secret
+                  key: SUPABASE_URL
+                  optional: true
+            - name: SUPABASE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: qr-canvas-secret
+                  key: SUPABASE_KEY
+                  optional: true
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: qr-canvas-secret
+                  key: GEMINI_API_KEY
+                  optional: true
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /api/rooms
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/rooms
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 20

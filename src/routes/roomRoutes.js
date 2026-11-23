@@ -34,6 +34,7 @@ router.get('/rooms', (req, res) => {
     code: r.code,
     title: r.title,
     owner: r.owner,
+    mode: r.mode || 'free',
     isSecret: !!r.isSecret,
     isClosed: !!r.isClosed,
     strokeCount: r.strokes ? r.strokes.length : 0,
@@ -54,15 +55,17 @@ router.get('/rooms/:roomCode', (req, res) => {
     return res.status(403).json({ error: '⛔ 관리자에 의해 폐쇄(CLOSED)된 방입니다. 일반 유저는 접근할 수 없습니다.', isClosed: true });
   }
 
-  res.json({
+  const roomData = {
     code: room.code,
     title: room.title,
     owner: room.owner,
+    mode: room.mode || 'free',
     isSecret: !!room.isSecret,
     isClosed: !!room.isClosed,
     strokeCount: room.strokes ? room.strokes.length : 0,
     createdAt: room.createdAt
-  });
+  };
+  res.json({ ...roomData, room: roomData });
 });
 
 // 4. 비밀방 암호 검증
@@ -84,14 +87,15 @@ router.post('/rooms/verify-entry', (req, res) => {
       return res.status(403).json({ error: '비밀방 코드가 일치하지 않습니다.' });
     }
   }
-  res.json({ ok: true, room: { code: room.code, title: room.title, owner: room.owner, isClosed: !!room.isClosed } });
+  res.json({ ok: true, room: { code: room.code, title: room.title, owner: room.owner, mode: room.mode || 'free', isClosed: !!room.isClosed } });
 });
 
 // 5. 방 생성
 router.post('/rooms/create', (req, res) => {
   const user = getSessionUser(req);
-  const { code, title, isSecret, secretCode } = req.body;
-  const roomCode = (code || '').trim().toUpperCase();
+  const { code, title, isSecret, secretCode, mode } = req.body;
+  const roomCode = (code || req.body.roomCode || '').trim().toUpperCase();
+  const roomTitle = title || req.body.roomTitle || req.body.roomName;
 
   if (!roomCode) return res.status(400).json({ error: '방 코드를 입력하세요.' });
   if (db.rooms[roomCode]) return res.status(409).json({ error: '이미 존재하는 방 코드입니다.' });
@@ -102,8 +106,9 @@ router.post('/rooms/create', (req, res) => {
 
   db.rooms[roomCode] = {
     code: roomCode,
-    title: title || `${roomCode} 벽화 갤러리`,
+    title: roomTitle || `${roomCode} 캔버스`,
     owner: user ? user.userId : 'user_a',
+    mode: mode === 'battle' ? 'battle' : 'free',
     isSecret: !!isSecret,
     secretCodeHash: isSecret ? hashPw(secretCode.trim()) : null,
     secretCode: isSecret ? secretCode.trim() : null,
@@ -115,7 +120,7 @@ router.post('/rooms/create', (req, res) => {
   if (supabase) {
     supabase.from('rooms').insert({
       code: roomCode,
-      title: title || `${roomCode} 벽화 갤러리`,
+      title: roomTitle || `${roomCode} 벽화 갤러리`,
       owner: user ? user.userId : 'user_a',
       is_secret: !!isSecret,
       secret_code: isSecret ? secretCode.trim() : null

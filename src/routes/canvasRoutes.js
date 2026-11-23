@@ -71,4 +71,26 @@ router.post('/canvas/clear-mine', (req, res) => {
   res.json({ message: `내가 그린 획 ${removedCount}개가 지워졌습니다.`, removedCount });
 });
 
+// 4. 캔버스 레이어 백그라운드 베이킹 최적화 (방장 또는 Admin)
+router.post('/canvas/bake', (req, res) => {
+  const user = getSessionUser(req);
+  const { roomCode } = req.body;
+  const code = (roomCode || '').toUpperCase();
+  const room = db.rooms[code];
+
+  if (!room) return res.status(404).json({ error: '방이 존재하지 않습니다.' });
+  if (!canManageRoom(user, room)) {
+    return res.status(403).json({ error: '방 관리자 권한이 필요합니다.' });
+  }
+
+  const { checkAndBakeRoomStrokes } = require('../engine/canvasBaker');
+  const result = checkAndBakeRoomStrokes(room);
+  saveDb(db);
+
+  res.json({
+    message: result.baked ? `오래된 획 ${result.bakedCount}개를 백그라운드 레이어로 베이킹 압축했습니다.` : '현재 베이킹 기준치에 도달하지 않았습니다.',
+    ...result
+  });
+});
+
 module.exports = router;

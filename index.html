@@ -66,6 +66,59 @@
       <canvas id="minimap-canvas"></canvas>
     </div>
 
+    <!-- ⚔️ 배틀 모드 전용 상단 점유율 & 타이머 & 팀 대기 현황 HUD -->
+    <div id="battle-hud-overlay" style="display:none; position:absolute; top:70px; left:50%; transform:translateX(-50%); z-index:30; width:90%; max-width:750px; pointer-events:none;">
+      <!-- 1. 대기 단계: 팀 인원 비 & 시작 버튼 -->
+      <div id="battle-waiting-panel" style="background:rgba(15, 12, 32, 0.88); backdrop-filter:blur(10px); border:2px solid #00f5d4; border-radius:18px; padding:14px 24px; display:flex; flex-direction:column; align-items:center; gap:10px; box-shadow:0 8px 32px rgba(0,0,0,0.5); pointer-events:auto;">
+        <div style="font-size:13px; font-weight:800; color:#00f5d4; letter-spacing:1px;">⚔️ 영역 점령전 준비 단계</div>
+        <div style="display:flex; align-items:center; justify-content:center; gap:20px; width:100%;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:20px;">🔴</span>
+            <span style="font-size:16px; font-weight:900; color:#ff0055;">RED 팀: <span id="battle-red-count">0</span>명</span>
+          </div>
+          <span style="font-size:20px; font-weight:900; color:#fff;">VS</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span style="font-size:16px; font-weight:900; color:#00bbf9;">BLUE 팀: <span id="battle-blue-count">0</span>명</span>
+            <span style="font-size:20px;">🔵</span>
+          </div>
+        </div>
+        <div style="font-size:12px; color:#aaa; text-align:center;">
+          💡 중앙 원형 로비에서 <b>왼쪽은 RED 팀</b>, <b>오른쪽은 BLUE 팀</b>으로 자동 배정됩니다.
+        </div>
+        <button id="btn-start-battle" onclick="triggerStartBattle()" style="margin-top:4px; padding:10px 28px; border-radius:30px; border:none; background:linear-gradient(135deg, #ff0055, #00bbf9); color:#fff; font-weight:900; font-size:14px; cursor:pointer; box-shadow:0 0 20px rgba(255,0,85,0.4); pointer-events:auto;">
+          ⚔️ 영역 점령전 시작!
+        </button>
+      </div>
+
+      <!-- 2. 경기 진행 단계: 점유율 게이지 & 타이머 -->
+      <div id="battle-playing-panel" style="display:none; background:rgba(15, 12, 32, 0.88); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.2); border-radius:18px; padding:12px 20px; flex-direction:column; gap:8px; box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <span style="font-size:15px; font-weight:900; color:#ff0055;">🔴 RED <span id="battle-playing-red-pct">50%</span></span>
+          <span id="battle-playing-timer" style="font-size:18px; font-weight:900; color:#fee440; background:rgba(0,0,0,0.5); padding:2px 14px; border-radius:12px; border:1px solid #fee440;">⏱️ 01:00</span>
+          <span style="font-size:15px; font-weight:900; color:#00bbf9;"><span id="battle-playing-blue-pct">50%</span> BLUE 🔵</span>
+        </div>
+        <!-- 점유율 바 -->
+        <div style="width:100%; height:16px; background:#222; border-radius:8px; overflow:hidden; display:flex;">
+          <div id="battle-bar-red" style="width:50%; background:linear-gradient(90deg, #ff0055, #ff5470); transition:width 0.3s ease;"></div>
+          <div id="battle-bar-blue" style="width:50%; background:linear-gradient(90deg, #00bbf9, #00f5d4); transition:width 0.3s ease;"></div>
+        </div>
+      </div>
+
+      <!-- 3. 카운트다운 오버레이 -->
+      <div id="battle-countdown-overlay" style="display:none; text-align:center; font-size:80px; font-weight:900; color:#fee440; text-shadow:0 0 35px #fee440; margin-top:20px;">
+        3
+      </div>
+
+      <!-- 4. 결과 발표 오버레이 -->
+      <div id="battle-gameover-panel" style="display:none; background:rgba(15, 12, 32, 0.95); backdrop-filter:blur(12px); border:2px solid #fee440; border-radius:20px; padding:20px 30px; flex-direction:column; align-items:center; gap:12px; margin-top:10px; pointer-events:auto;">
+        <div id="battle-winner-title" style="font-size:24px; font-weight:900; color:#fee440;">🏆 RED 팀 승리!</div>
+        <div id="battle-final-scores" style="font-size:15px; color:#ddd;">최종 점유율: RED 58% vs BLUE 42%</div>
+        <button onclick="triggerResetBattle()" style="padding:10px 24px; border-radius:20px; border:none; background:#00f5d4; color:#080a10; font-weight:900; cursor:pointer; pointer-events:auto;">
+          🔄 다음 라운드 준비 (로비로 리셋)
+        </button>
+      </div>
+    </div>
+
     <!-- 상단 AI 아트 도슨트 비평 배너 -->
     <div id="ai-docent-banner">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
@@ -141,6 +194,19 @@
       <div class="form-group">
         <label>방 제목 (화면에 표시될 이름)</label>
         <input type="text" id="new-room-title" placeholder="예: 밤하늘 네온 아트 갤러리">
+      </div>
+      <div class="form-group">
+        <label>게임 모드 선택</label>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:4px;">
+          <label style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.06); padding:10px; border-radius:8px; border:1px solid #00f5d4; cursor:pointer;">
+            <input type="radio" name="new-room-mode" value="free" checked style="width:auto;">
+            <span style="font-size:12px; font-weight:700; color:#00f5d4;">🎨 자유 그래피티</span>
+          </label>
+          <label style="display:flex; align-items:center; gap:6px; background:rgba(255,255,255,0.06); padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.2); cursor:pointer;">
+            <input type="radio" name="new-room-mode" value="battle" style="width:auto;">
+            <span style="font-size:12px; font-weight:700; color:#ff0055;">⚔️ 영역 점령전</span>
+          </label>
+        </div>
       </div>
       <div class="form-group" style="display:flex; align-items:center; gap:8px;">
         <input type="checkbox" id="new-room-is-secret" style="width:auto;" onchange="toggleSecretInput(this.checked)">

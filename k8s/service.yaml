@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: qr-canvas-service
+  namespace: default
+  labels:
+    app: qr-canvas-app
+spec:
+  # Docker Desktop Mac에서는 LoadBalancer 설정 시 localhost:3000으로 즉시 포트 바인딩됩니다.
+  type: LoadBalancer
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: qr-canvas-app

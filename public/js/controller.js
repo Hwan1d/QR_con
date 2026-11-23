@@ -9,6 +9,10 @@
     let authToken = localStorage.getItem('qr_auth_token') || '';
     let currentAuthUser = null;
     let isRoomOwner = false;
+    let canManageBattle = false;
+    let currentRoomMode = 'free';
+    let myTeam = null;
+    let currentBattlePhase = 'waiting';
 
     // 🚶 이동 모드 ('move': 이동만 / 'draw': 자국 남기기)
     let moveMode = 'move';
@@ -29,6 +33,90 @@
 
     document.getElementById('room-code-tag').innerText = currentRoom;
 
+    async function checkRoomMode() {
+      try {
+        const res = await fetch(`/api/rooms/${encodeURIComponent(currentRoom)}`);
+        if (res.ok) {
+          const roomData = await res.json();
+          if (roomData.room && roomData.room.mode) {
+            currentRoomMode = roomData.room.mode;
+            applyRoomModeUI(currentRoomMode);
+          }
+        }
+      } catch (e) {}
+    }
+
+    function applyRoomModeUI(mode) {
+      currentRoomMode = mode || 'free';
+      const isBattle = currentRoomMode === 'battle';
+      
+      document.querySelectorAll('.mode-tab-bar').forEach(el => {
+        el.style.display = isBattle ? 'none' : 'flex';
+      });
+      
+      const palette = document.querySelector('.palette');
+      if (palette) palette.style.display = isBattle ? 'none' : 'flex';
+      
+      const moveModeBar = document.querySelector('.move-mode-bar');
+      if (moveModeBar) moveModeBar.style.display = isBattle ? 'none' : 'flex';
+      
+      const trailBar = document.getElementById('trail-style-bar');
+      if (trailBar) trailBar.style.display = 'none';
+
+      const eraserBar = document.getElementById('eraser-size-bar');
+      if (eraserBar) eraserBar.style.display = 'none';
+
+      const battlePanel = document.getElementById('controller-battle-panel');
+      if (battlePanel) battlePanel.style.display = isBattle ? 'block' : 'none';
+
+      if (isBattle) {
+        document.getElementById('joystick-view').style.display = 'flex';
+        document.getElementById('canvas-view').style.display = 'none';
+        document.getElementById('stamp-view').style.display = 'none';
+        moveMode = 'draw';
+        currentTrailStyle = 'solid';
+        const statusHint = document.getElementById('joy-status-hint');
+        if (statusHint) {
+          statusHint.innerHTML = '⚔️ <span style="color:#00f5d4; font-weight:700;">영역 점령전 모드</span>: 조이스틱을 움직여 팀 영역을 점령하세요!';
+        }
+      }
+    }
+
+    function updateMyTeamUI(team, color) {
+      myTeam = team;
+      if (color) myColor = color;
+      const badge = document.getElementById('ctrl-team-badge');
+      if (!badge) return;
+      if (team === 'red') {
+        badge.innerText = '🔴 RED 팀';
+        badge.style.background = 'rgba(255, 0, 85, 0.2)';
+        badge.style.borderColor = '#ff0055';
+        badge.style.color = '#ff0055';
+        if (joyStick) joyStick.style.background = 'radial-gradient(circle, #ff0055, #ffffff)';
+      } else if (team === 'blue') {
+        badge.innerText = '🔵 BLUE 팀';
+        badge.style.background = 'rgba(0, 187, 249, 0.2)';
+        badge.style.borderColor = '#00bbf9';
+        badge.style.color = '#00bbf9';
+        if (joyStick) joyStick.style.background = 'radial-gradient(circle, #00bbf9, #ffffff)';
+      } else {
+        badge.innerText = '대기 중...';
+        badge.style.background = 'rgba(255, 255, 255, 0.08)';
+        badge.style.borderColor = '#555';
+        badge.style.color = '#aaa';
+      }
+    }
+
+    function triggerStartBattle() {
+      triggerHaptic('tap');
+      socket.emit('start-battle', { room: currentRoom });
+    }
+
+    function triggerResetBattle() {
+      triggerHaptic('tap');
+      socket.emit('reset-battle', { room: currentRoom });
+    }
+
     function joinGameRoom() {
       socket.emit('join-controller', {
         room: currentRoom,
@@ -37,6 +125,7 @@
         userId: currentAuthUser ? currentAuthUser.userId : 'guest',
         token: authToken
       });
+      checkRoomMode();
       checkRoomOwnerStatus();
     }
     socket.on('connect', joinGameRoom);
@@ -474,6 +563,7 @@
         });
         const data = await res.json();
         const canManage = !!data.canManage;
+        canManageBattle = canManage;
         document.getElementById('owner-panel').style.display = canManage ? 'block' : 'none';
         if (canManage) {
           updateBotCountBadge();
@@ -482,8 +572,174 @@
             titleTag.innerText = data.isAdmin ? '👑 시스템 관리자(Admin)' : `👑 방 주인 (${data.roomOwner})`;
           }
         }
+        const btnBattleStart = document.getElementById('ctrl-btn-start-battle');
+        if (btnBattleStart && currentRoomMode === 'battle') {
+          btnBattleStart.style.display = (canManage && (currentBattlePhase === 'waiting' || currentBattlePhase === 'game_over')) ? 'block' : 'none';
+        }
       } catch (e) {
         document.getElementById('owner-panel').style.display = 'none';
+      }
+    }
+
+    // ==========================================
+    // ⚔️ 영역 점령전 (Territory Battle) 소켓 이벤트
+    // ==========================================
+    socket.on('sync-my-position', (data) => {
+      if (data.roomMode) {
+        currentRoomMode = data.roomMode;
+        applyRoomModeUI(currentRoomMode);
+      }
+      if (data.team) {
+        updateMyTeamUI(data.team, data.color);
+      }
+    });
+
+    socket.on('player-team-changed', (data) => {
+      if (data.id === socket.id) {
+        updateMyTeamUI(data.team, data.color);
+        triggerHaptic('toggle');
+        if (data.locked) {
+          showFeedback(`🔒 팀 확정: ${data.team === 'red' ? '🔴 RED 팀' : '🔵 BLUE 팀'} (변경 불가)`);
+        } else {
+          showFeedback(`팀 배정: ${data.team === 'red' ? '🔴 RED 팀' : '🔵 BLUE 팀'}`);
+        }
+      }
+    });
+
+    function getBattlePercentages(data) {
+      let r = 50;
+      let b = 50;
+      if (data) {
+        if (typeof data.redPercent === 'number' && !isNaN(data.redPercent)) r = data.redPercent;
+        else if (typeof data.redPct === 'number' && !isNaN(data.redPct)) r = data.redPct;
+        if (typeof data.bluePercent === 'number' && !isNaN(data.bluePercent)) b = data.bluePercent;
+        else if (typeof data.bluePct === 'number' && !isNaN(data.bluePct)) b = data.bluePct;
+      }
+      r = Math.max(0, Math.min(100, Math.round(r)));
+      b = Math.max(0, Math.min(100, Math.round(b)));
+      return { red: r, blue: b };
+    }
+
+    socket.on('battle-state-update', (data) => {
+      if (!data) return;
+      currentBattlePhase = data.phase || 'waiting';
+      updateBattleUI(data);
+    });
+
+    socket.on('battle-teams-updated', (data) => {
+      if (currentBattlePhase === 'waiting') {
+        const msg = document.getElementById('ctrl-battle-msg');
+        if (msg) msg.innerText = `대기실 인원: RED ${data.redCount}명 vs BLUE ${data.blueCount}명`;
+      }
+    });
+
+    socket.on('battle-countdown', (data) => {
+      currentBattlePhase = 'countdown';
+      triggerHaptic('tap');
+      const msg = document.getElementById('ctrl-battle-msg');
+      if (msg) msg.innerHTML = `⏰ 경기 시작 <span style="color:#fee440; font-size:16px; font-weight:800;">${data.count}</span>초 전! (팀 고정)`;
+      const btn = document.getElementById('ctrl-btn-start-battle');
+      if (btn) btn.style.display = 'none';
+    });
+
+    socket.on('battle-started', (data) => {
+      currentBattlePhase = 'playing';
+      triggerHaptic('mode');
+      const msg = document.getElementById('ctrl-battle-msg');
+      if (msg) msg.innerText = '⚔️ 경기 시작! 조이스틱으로 영역을 넓히세요!';
+      const timer = document.getElementById('ctrl-battle-timer');
+      if (timer) timer.innerText = `${data.timer || 60}초`;
+      const btn = document.getElementById('ctrl-btn-start-battle');
+      if (btn) btn.style.display = 'none';
+      const { red, blue } = getBattlePercentages(data);
+      updateScoreBars(red, blue);
+    });
+
+    socket.on('battle-tick', (data) => {
+      const timer = document.getElementById('ctrl-battle-timer');
+      if (timer) timer.innerText = `${data.timer}초`;
+      const { red, blue } = getBattlePercentages(data);
+      updateScoreBars(red, blue);
+    });
+
+    socket.on('battle-game-over', (data) => {
+      currentBattlePhase = 'game_over';
+      triggerHaptic('stamp');
+      const timer = document.getElementById('ctrl-battle-timer');
+      if (timer) timer.innerText = '종료';
+      const { red, blue } = getBattlePercentages(data);
+      const msg = document.getElementById('ctrl-battle-msg');
+      if (msg) {
+        if (data.winner === 'red') {
+          msg.innerHTML = `🏆 <strong style="color:#ff0055">RED 팀 승리!</strong> (${red}%)`;
+        } else if (data.winner === 'blue') {
+          msg.innerHTML = `🏆 <strong style="color:#00bbf9">BLUE 팀 승리!</strong> (${blue}%)`;
+        } else {
+          msg.innerHTML = `🤝 <strong>무승부!</strong> (${red}% vs ${blue}%)`;
+        }
+      }
+      updateScoreBars(red, blue);
+      
+      const btn = document.getElementById('ctrl-btn-start-battle');
+      if (btn && canManageBattle) {
+        btn.innerText = '🔄 새 경기 시작';
+        btn.style.display = 'block';
+      }
+    });
+
+    socket.on('battle-reset', (data) => {
+      currentBattlePhase = 'waiting';
+      const timer = document.getElementById('ctrl-battle-timer');
+      if (timer) timer.innerText = '60초';
+      updateScoreBars(50, 50);
+      const msg = document.getElementById('ctrl-battle-msg');
+      if (msg) msg.innerText = '중앙 대기 원에서 좌/우 팀을 선택하세요!';
+      const btn = document.getElementById('ctrl-btn-start-battle');
+      if (btn) {
+        btn.innerText = '⚔️ 영역 점령전 시작!';
+        btn.style.display = canManageBattle ? 'block' : 'none';
+      }
+    });
+
+    function updateScoreBars(redPct, bluePct) {
+      const r = Math.max(0, Math.min(100, Math.round(Number.isFinite(redPct) ? redPct : 50)));
+      const b = Math.max(0, Math.min(100, Math.round(Number.isFinite(bluePct) ? bluePct : (100 - r))));
+      const barRed = document.getElementById('ctrl-bar-red');
+      const barBlue = document.getElementById('ctrl-bar-blue');
+      const pctRed = document.getElementById('ctrl-pct-red');
+      const pctBlue = document.getElementById('ctrl-pct-blue');
+      if (barRed) barRed.style.width = `${r}%`;
+      if (barBlue) barBlue.style.width = `${b}%`;
+      if (pctRed) pctRed.innerText = `RED ${r}%`;
+      if (pctBlue) pctBlue.innerText = `${b}% BLUE`;
+    }
+
+    function updateBattleUI(data) {
+      const timer = document.getElementById('ctrl-battle-timer');
+      if (timer) timer.innerText = `${data.timer || 60}초`;
+      const { red, blue } = getBattlePercentages(data);
+      updateScoreBars(red, blue);
+
+      const btn = document.getElementById('ctrl-btn-start-battle');
+      if (btn) {
+        if (data.phase === 'waiting' && canManageBattle) {
+          btn.innerText = '⚔️ 영역 점령전 시작!';
+          btn.style.display = 'block';
+        } else if (data.phase === 'game_over' && canManageBattle) {
+          btn.innerText = '🔄 새 경기 시작';
+          btn.style.display = 'block';
+        } else {
+          btn.style.display = 'none';
+        }
+      }
+
+      const msg = document.getElementById('ctrl-battle-msg');
+      if (msg) {
+        if (data.phase === 'waiting') {
+          msg.innerText = `중앙 대기 원에서 좌/우 팀을 선택하세요! (RED ${data.redCount || 0} : ${data.blueCount || 0} BLUE)`;
+        } else if (data.phase === 'playing') {
+          msg.innerText = '⚔️ 점령전 진행 중! 경기장을 칠하세요!';
+        }
       }
     }
 

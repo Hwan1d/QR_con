@@ -8,5 +8,5 @@ resources:
 
 # GitHub Actions가 새 Docker 이미지를 빌드했을 때 아래 태그를 자동으로 갱신합니다.
 images:
-  - name: hwan1d/qr-canvas-app
+  - name: Addr1/qr-canvas-app
     newTag: latest

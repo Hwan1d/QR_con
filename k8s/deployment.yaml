@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: qr-canvas-container
-          image: hwan1d/qr-canvas-app:latest
+          image: Addr1/qr-canvas-app:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

@@ -2,8 +2,17 @@ const assert = require('assert');
 const { modeManager } = require('../src/modes');
 const { checkAndBakeRoomStrokes } = require('../src/engine/canvasBaker');
 
+const PORT = 3004;
+process.env.PORT = PORT;
+const { app, server } = require('../server');
+
 async function runBakingAndModesTest() {
   console.log('🧪 Starting Game Mode Framework & Baking Optimization Tests...');
+
+  // Ensure server is listening for test
+  if (!server.listening) {
+    await new Promise(resolve => server.listen(PORT, 'localhost', resolve));
+  }
 
   // 1. Game Mode Registry Test
   console.log('1️⃣ Testing Game Mode Manager Registry...');
@@ -54,7 +63,6 @@ async function runBakingAndModesTest() {
 
   // 4. Test REST API /api/canvas/bake
   console.log('4️⃣ Testing POST /api/canvas/bake endpoint...');
-  const PORT = 3000;
   const baseUrl = `http://localhost:${PORT}`;
 
   // Login as admin
@@ -85,6 +93,9 @@ async function runBakingAndModesTest() {
   console.log('✅ POST /api/canvas/bake endpoint verified!');
 
   console.log('🎉 ALL GAME MODE FRAMEWORK & BAKING TESTS PASSED PERFECTLY!');
+  server.close(() => {
+    process.exit(0);
+  });
 }
 
 runBakingAndModesTest().catch(err => {

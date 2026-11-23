@@ -2,11 +2,18 @@ const assert = require('assert');
 const { io } = require('socket.io-client');
 const http = require('http');
 
+const PORT = 3005;
+process.env.PORT = PORT;
+const { app, server } = require('../server');
+
 async function runBattleModeTest() {
   console.log('🧪 Starting Territory Battle Mode integration test...');
 
+  if (!server.listening) {
+    await new Promise(resolve => server.listen(PORT, 'localhost', resolve));
+  }
+
   const roomCode = 'BAT_' + Date.now().toString(36).toUpperCase();
-  const PORT = 3000;
   const baseUrl = `http://localhost:${PORT}`;
 
   // 1. Create a battle room via REST API
@@ -186,8 +193,10 @@ async function runBattleModeTest() {
   ctrl1.disconnect();
   ctrl2.disconnect();
   screenSocket.disconnect();
-
   console.log('🎉 ALL TERRITORY BATTLE TESTS PASSED SUCCESSFULLY!');
+  server.close(() => {
+    process.exit(0);
+  });
 }
 
 runBattleModeTest().catch((err) => {
